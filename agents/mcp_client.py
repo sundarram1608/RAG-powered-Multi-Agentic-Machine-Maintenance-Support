@@ -12,6 +12,7 @@ then the stdio server is auto-spawned by this client.
 """
 
 import asyncio
+import json
 import sys
 from pathlib import Path
 
@@ -21,6 +22,21 @@ import config
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
 _client = MultiServerMCPClient(config.MCP_SERVERS)
+
+
+def parse_tool_result(raw):
+    """
+    Normalize a LangChain-MCP tool result into the tool's native return value.
+
+    The adapter delivers MCP tool output as a list of content blocks
+    (`[{"type": "text", "text": "<json>"}]`); our tools return JSON. This unwraps
+    that to the dict/list the tool actually returned.
+    """
+    if isinstance(raw, str):
+        return json.loads(raw)
+    if isinstance(raw, list) and raw and isinstance(raw[0], dict) and "text" in raw[0]:
+        return json.loads(raw[0]["text"])
+    return raw
 
 
 async def get_all_tools():

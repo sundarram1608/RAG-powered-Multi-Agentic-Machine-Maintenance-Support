@@ -39,21 +39,24 @@ human-in-the-loop before anything irreversible.
 |---|---|---|---|---|
 | 1 | **Input** | Llama | — | scope + prompt-injection / PII-request guard |
 | 2 | **Supervisor** | Llama | — | route: troubleshoot / analytics / manage_incident / general |
-| 3 | **Analytics** | Llama | `run_readonly_query` | NL → read-only SQL → answer |
-| 4 | **Manage Incident** | Llama | write/booking tools *(TBD)* | direct action on a KNOWN incident/booking (close, reassign, (re)book) |
-| 5 | **Intake** | Llama | `get_machine` | resolve & validate machine; clarify if needed |
-| 6 | **Diagnosis** | Llama | RAG + DB read tools | gather evidence (corrective-RAG) → root cause + fix |
-| 7 | **Verifier** | **Gemini** | — | judge groundedness/relevance/safety; loop back if weak |
-| 8 | **Decider** | Llama | — | ask the user: self-fix or technician? |
-| 9 | **Self Action** | Llama | RAG + `create_incident`, `update_incident` | guide the operator (with safety); log a self-resolved incident |
-| 10 | **Technician Action** | Llama | `find_available_technician`, `create_incident`, `book_technician_slot`, `update_incident`, `send_email` | book a technician/supervisor, update tables, notify |
-| 11 | **Output** | Llama | — | compose the final reply (+ final PII scrub) |
+| 3 | **Analytics** | Llama | `run_readonly_query` | coder: NL → read-only SQL; executor: run approved SQL |
+| 4 | **Text-to-SQL Reviewer** | **Gemini** | — | judge the SQL: grounded / relevant / safe; loop back if not |
+| 5 | **Manage Incident** | Llama | write/booking tools *(TBD)* | direct action on a KNOWN incident/booking (close, reassign, (re)book) |
+| 6 | **Intake** | Llama | `get_machine` | resolve & validate machine; clarify if needed |
+| 7 | **Diagnosis** | Llama | RAG + DB read tools | gather evidence (corrective-RAG) → root cause + fix |
+| 8 | **Verifier** | **Gemini** | — | judge groundedness/relevance/safety; loop back if weak |
+| 9 | **Decider** | Llama | — | ask the user: self-fix or technician? |
+| 10 | **Self Action** | Llama | RAG + `create_incident`, `update_incident` | guide the operator (with safety); log a self-resolved incident |
+| 11 | **Technician Action** | Llama | `find_available_technician`, `create_incident`, `book_technician_slot`, `update_incident`, `send_email` | book a technician/supervisor, update tables, notify |
+| 12 | **Output** | Llama | — | compose ALL final replies (+ mid-flow asks via interrupt); final PII scrub |
 
 **Flow (narrative):** user turn → **Input** (scope/safety) → **Supervisor** routes →
-*analytics* = **Analytics** → **Output**; *manage_incident* = **Manage Incident**
-(approval interrupt before writes) → **Output**; *general* = direct **Output**;
-*troubleshoot* = **Intake** (clarify via interrupt if details missing) →
-**Diagnosis** (RAG + DB) → **Verifier** (retry loop, capped at
+*analytics* = **Analytics** (coder) → **Text-to-SQL Reviewer** → *(approved)*
+**Analytics** (execute) → **Output**; *(reviewer-reject or DB-error loops back to
+the coder, capped at `ANALYTICS_MAX_ATTEMPTS`)*. *manage_incident* = **Manage
+Incident** (approval interrupt before writes) → **Output**; *general* = direct
+**Output**; *troubleshoot* = **Intake** (clarify via interrupt if details missing)
+→ **Diagnosis** (RAG + DB) → **Verifier** (retry loop, capped at
 `VERIFY_MAX_ATTEMPTS`) → **Decider** (asks the user) → **Self Action** *or*
 **Technician Action** (approval interrupt before writes/email) → **Output**.
 
@@ -111,7 +114,7 @@ to each agent's allow-list (`config.AGENT_TOOLS`):
 
 | Agent | Tools |
 |---|---|
-| input · supervisor · verifier · decider · output | *(none)* |
+| input · supervisor · text_to_sql_reviewer · verifier · decider · output | *(none)* |
 | analytics | `run_readonly_query` |
 | intake | `get_machine` |
 | diagnosis | `user_manual_retrieval`, `safety_retrieval`, `get_overdue_status`, `get_maintenance_history`, `get_incident_history`, `check_inventory` |
@@ -143,8 +146,9 @@ The plumbing every node stands on (no nodes yet):
 
 ## Agents (filled in as each is built — Phase 4b)
 
-> Build order: Input → Supervisor → Analytics → **Manage Incident** → Intake →
-> Diagnosis → Verifier → Decider → Self Action → Technician Action → Output.
+> Build order: Input → Supervisor → Analytics → **Text-to-SQL Reviewer** →
+> Manage Incident → Intake → Diagnosis → Verifier → Decider → Self Action →
+> Technician Action → Output.
 > Prompts are versioned in `prompts/<agent>.py` (a `VERSION` + changelog header);
 > each run is tagged with the `prompt_version` it used. Prompt text is not
 > reproduced here.
@@ -173,6 +177,27 @@ The plumbing every node stands on (no nodes yet):
 - **Routing:** `troubleshoot` → **Intake** · `analytics` → **Analytics** · `manage_incident` → **Manage Incident** · `general` → **Output**.
 - **Edge cases:** READ data question → `analytics`, WRITE/action on a known record → `manage_incident`; a symptom that needs diagnosing → `troubleshoot` (even if "log it" is mentioned); capability/greeting → `general`; ambiguous-but-actionable → `troubleshoot` (Intake clarifies, avoiding dead-ends).
 - **Prompt:** `prompts/supervisor.py` · v1.0.0.
+
+### 3. Analytics Agent (Text-to-SQL coder + executor) — `nodes/analytics.py`  ✅
+- **Purpose:** answer read-only analytics questions by generating SQL (grounded in the schema) and, after the Reviewer approves, executing it. Result summarization is the **Output** agent's job.
+- **LLM:** **Groq Llama 3.3 70B** (generate phase); **no LLM** in the execute phase.
+- **Tools:** `run_readonly_query` (execute phase only).
+- **Two phases (one agent):** `analytics_generate` (LLM → `SqlPlan`) and `analytics_execute` (mechanical `run_readonly_query` → rows).
+- **Input format** (state read): `user_input`; on retry also `sql_plan` + `sql_review`/`sql_result` (the critique/DB-error to fix).
+- **Output format** (Pydantic `SqlPlan` via `with_structured_output`) → state `sql_plan`, `analytics_attempts`; execute → `sql_result`; tags `prompt_versions["analytics"]`.
+- **Schema grounding:** the prompt is filled with `get_schema_context()` (from `schema_metadata.json`) + `REFERENCE_TODAY` (`2026-06-16`) so date logic matches the dataset.
+- **Edge cases:** reviewer-reject or DB-error → regenerate with the critique (capped at `ANALYTICS_MAX_ATTEMPTS = 3`); never selects `phone`; empty result → handled by Output ("no matching records"); results auto-capped at 200 rows.
+- **Prompt:** `prompts/analytics.py` (`ANALYTICS_CODER_SYSTEM`) · v1.0.0.
+
+### 4. Text-to-SQL Reviewer — `nodes/text_to_sql_reviewer.py`  ✅
+- **Purpose:** judge the generated SQL **before** it runs — the *semantic* layer of a 3-layer defense (reviewer = grounded/relevant/safe; `validate_select_sql` = mechanical; `maint_readonly` = DB enforcement).
+- **LLM:** **Gemini 2.5 Flash** (independent judge — different model family than the Llama coder).
+- **Tools:** none.
+- **Input format** (state read): `user_input`, `sql_plan`.
+- **Output format** (Pydantic `SqlReview` via `with_structured_output`) → state `sql_review` (`grounded`, `relevant`, `safe`, `approved`, `issues`); tags `prompt_versions["text_to_sql_reviewer"]`.
+- **Loop:** `approved = grounded ∧ relevant ∧ safe`. If not approved (or execution later errors) → back to Analytics coder with `issues`, capped at `ANALYTICS_MAX_ATTEMPTS`; on exhaustion → Output (graceful "couldn't answer reliably").
+- **Edge cases:** invented table/column → `grounded=False`; wrong computation for the question → `relevant=False`; write/`phone`/multi-statement → `safe=False`. Knows `REFERENCE_TODAY`, so it does **not** penalize correct use of the fixed reference date.
+- **Prompt:** `prompts/text_to_sql_reviewer.py` · v1.0.0.
 
 ## Graph assembly (Phase 4c)
 

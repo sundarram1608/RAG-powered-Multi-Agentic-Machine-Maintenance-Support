@@ -8,6 +8,7 @@ and workflow constants. Loads API keys from the project-root .env.
 
 import os
 import sys
+from datetime import date
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -21,6 +22,10 @@ REASONING_MODEL = "llama-3.3-70b-versatile"   # Groq — reasoning / tool-callin
 JUDGE_MODEL = "gemini-2.5-flash"              # Google — independent verifier (+ future vision)
 REASONING_TEMPERATURE = 0.0
 JUDGE_TEMPERATURE = 0.0
+
+# Dataset reference "today" — must match the data layer's REFERENCE_TODAY
+# (seeded data is anchored to June 2026; the real date.today() is not used).
+REFERENCE_TODAY = date(2026, 6, 16)
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
@@ -47,6 +52,7 @@ AGENT_TOOLS = {
                 "input": [],
                 "supervisor": [],
                 "analytics": ["run_readonly_query"],
+                "text_to_sql_reviewer": [],
                 "intake": ["get_machine"],
                 "diagnosis": [
                                 "user_manual_retrieval", "safety_retrieval", "get_overdue_status",
@@ -67,3 +73,4 @@ AGENT_TOOLS = {
 # ── Workflow constants ──
 VERIFY_MAX_ATTEMPTS = 3        # verifier -> diagnosis self-correction cap
 MAX_DIAGNOSIS_REQUERIES = 3    # corrective-RAG re-query cap inside diagnosis
+ANALYTICS_MAX_ATTEMPTS = 3     # text-to-SQL coder<->reviewer / DB-error retry cap

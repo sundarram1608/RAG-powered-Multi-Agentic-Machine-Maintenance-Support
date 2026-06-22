@@ -64,6 +64,22 @@ class Decision(BaseModel):
     path: Literal["self", "technician"] = Field(description="self = the operator will fix it themselves (Self Action); technician = dispatch a technician (Technician Action).")
 
 
+class SqlPlan(BaseModel):
+    """Analytics Agent (coder) — the generated query, not yet executed."""
+    sql: str = Field(description="A single read-only SELECT/WITH statement answering the question.")
+    rationale: str = Field(description="One sentence on how the query answers the question.")
+    tables_used: List[str] = Field(default_factory=list, description="Tables the query reads.")
+
+
+class SqlReview(BaseModel):
+    """Text-to-SQL Reviewer — judges the generated SQL before it runs."""
+    grounded: bool = Field(description="True if every table/column used exists in the schema and joins use real foreign keys.")
+    relevant: bool = Field(description="True if the query actually answers the user's question (right filters/grouping/aggregation).")
+    safe: bool = Field(description="True if it is a single read-only SELECT/WITH, no writes/DDL/comments, and does not reference the phone column.")
+    approved: bool = Field(description="True only if grounded AND relevant AND safe.")
+    issues: List[str] = Field(default_factory=list, description="Specific, actionable problems for the coder to fix; empty if approved.")
+
+
 class SqlAnswer(BaseModel):
-    """Analytics Agent — natural-language answer derived from a read-only query."""
+    """Output Agent (analytics path) — natural-language answer from the query rows."""
     answer: str = Field(description="Plain-language answer to the analytics question, derived from the query result rows.")

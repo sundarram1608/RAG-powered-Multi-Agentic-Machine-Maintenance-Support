@@ -23,7 +23,7 @@ class State(TypedDict, total=False):
     guard_reason: str
 
     # --- routing ---
-    intent: str                                # troubleshoot | analytics | chitchat
+    intent: str                                # troubleshoot | analytics | manage_incident | general
 
     # --- intake ---
     machine_id: Optional[str]
@@ -48,8 +48,12 @@ class State(TypedDict, total=False):
     approval: Optional[str]                    # "approved" | "rejected"
     action_result: Optional[dict]
 
-    # --- analytics ---
-    sql_answer: Optional[dict]
+    # --- analytics (text-to-SQL coder <-> reviewer loop) ---
+    sql_plan: Optional[dict]                   # SqlPlan (generated query)
+    sql_review: Optional[dict]                 # SqlReview (reviewer verdict)
+    sql_result: Optional[dict]                 # run_readonly_query result
+    analytics_attempts: int                    # coder<->reviewer / DB-error retries
+    sql_answer: Optional[dict]                 # final answer (rendered by Output)
 
     # --- output ---
     final_response: Optional[str]
