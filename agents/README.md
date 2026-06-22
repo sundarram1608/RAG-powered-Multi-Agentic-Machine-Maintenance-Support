@@ -211,6 +211,17 @@ The plumbing every node stands on (no nodes yet):
 - **Edge cases:** no/unknown incident id → clarify; **close requires a comment** → ask if missing (never invented); close an already-closed / assign to a closed incident → `unsupported`; reject at approval → no writes.
 - **Prompt:** `prompts/manage_incident.py` · v1.0.0.
 
+### 6. Intake Agent — `nodes/intake.py`  ✅
+- **Purpose:** the troubleshoot entry point — ensure a **valid machine** + a **symptom** before diagnosis; hand `mvc_code` + `symptom` to Diagnosis.
+- **LLM:** **Groq Llama 3.3 70B** (reasoner).
+- **Tools:** `get_machine`.
+- **How it works:** the LLM extracts `machine_id` + `symptom` (merging anything gathered earlier); the node validates via `get_machine`, resolving `mvc_code`/`status`. `mvc_code` is filled by the node (the LLM never guesses it).
+- **Input format** (state read): `user_input` (+ carried `machine_id`/`symptom` on resume).
+- **Output format** (Pydantic `Intake`, enriched) → state: `machine_id`, `mvc_code`, `machine_status`, `symptom`, `needs_clarification`, `clarification_question`; tags `prompt_versions["intake"]`.
+- **Routing:** `needs_clarification = True` → clarification interrupt (ask) → re-enter on reply (carries the part already gathered); `False` → **Diagnosis**.
+- **Edge cases:** missing machine id → ask which machine; unknown machine (`exists: False`) → ask to confirm the id; **Decommissioned** → ask if the machine number is correct (it's retired/not serviceable); missing symptom → ask what the problem is; **Under Maintenance / Idle** still proceed.
+- **Prompt:** `prompts/intake.py` · v1.0.0.
+
 ## Graph assembly (Phase 4c)
 
 > `graph.py`: `StateGraph`, edges + conditional edges (clarification, verification
