@@ -53,13 +53,13 @@ the model, not just for humans.
 
 | Transport           | Tool group                                           | How it runs                                                                           | Why                                                         |
 | ------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| **stdio** (default) | local data plane — 6 read + 2 RAG + 3 write tools    | the agent **auto-spawns** `server.py` as a child process; no port, no network surface | tools bundled with the agent, touching local MySQL + Chroma |
+| **stdio** (default) | local data plane — 8 read + 2 RAG + 3 write tools    | the agent **auto-spawns** `server.py` as a child process; no port, no network surface | tools bundled with the agent, touching local MySQL + Chroma |
 | **streamable-HTTP** | shared services — `run_readonly_query`, `send_email` | runs as a **separate `127.0.0.1:8000` process**; the agent connects by URL            | "service-style" tools you could host separately later       |
 
 
 A single FastMCP instance serves one transport, so these are two server
 instances (built from the same file). The agent layer aggregates both with
-`langchain-mcp-adapters`' `MultiServerMCPClient`, presenting the union of all 13
+`langchain-mcp-adapters`' `MultiServerMCPClient`, presenting the union of all 15
 tools to the LLM. Switching the HTTP group to a remote host later is a one-line
 change (`host`/`port`), with auth/TLS added only if exposed beyond localhost.
 
@@ -73,7 +73,7 @@ python mcp_server/server.py http        # -> http://127.0.0.1:8000/mcp
 #    to run it by hand: python mcp_server/server.py            # (default = stdio)
 
 # smoke test — list the tools each transport exposes, no LLM/network:
-python mcp_server/server.py --selftest   # expect 11 stdio + 2 http tools
+python mcp_server/server.py --selftest   # expect 13 stdio + 2 http tools
 ```
 
 > **First-time prerequisites:** `python mcp_server/setup_db_users.py` (DB users)
@@ -119,6 +119,15 @@ python mcp_server/server.py --selftest   # expect 11 stdio + 2 http tools
 - **Used by:** Diagnosis ("has this happened before / how was it fixed?").
 - **Edge cases:** **PII-minimized** — omits `reported_by`/`technician_id`; **open** incidents (NULL resolution/closure) are included; none → `[]`.
 
+### `get_incident(incident_id)`
+
+- **Purpose:** fetch ONE incident by id with its current state (for acting on a known incident).
+- **What it does:** `SELECT … WHERE incident_id = %s`; adds `status` (`open`/`closed`).
+- **Input:** `incident_id: str` (case-insensitive, e.g. `inc_26`).
+- **Output:** `{exists: True, incident_id, machine_id, status, reported_date, reported_by, user_complaint, agent_root_cause, agentic_resolution, technician_id, work_date, work_slot, technician_comments, incident_closure_date}` · or `{exists: False}`.
+- **Used by:** Manage Incident (confirm existence, show state for approval, find who to notify).
+- **Edge cases:** unknown id → `{exists: False}`; returns `reported_by`/`technician_id` (employee_ids, not PII — `send_email` resolves addresses internally). Distinct from `get_incident_history` (which is keyed by machine).
+
 ### `check_inventory(part)`
 
 - **Purpose:** stock / availability / bin / compatibility for a part.
@@ -136,6 +145,15 @@ python mcp_server/server.py --selftest   # expect 11 stdio + 2 http tools
 - **Output:** `{assignee_role: "Technician", employee_id, date, availability_slot, shift_time, escalated: False}` · or `{assignee_role: "Supervisor", employee_id, date, availability_slot, escalated: True, note}` · or `{available: False, note}`. The returned `date` is the scheduled **work date** and may differ from the booking date.
 - **Used by:** Action (allocate someone to an incident).
 - **Edge cases:** booking late in the day rolls forward to the next day's slots; no technician within 3 days → supervisor escalation with a computed slot; no active supervisor either → `{available: False}`. Returns `employee_id` only — **never the email** (PII; `send_email` resolves it internally).
+
+### `list_available_technicians(from_date=None, employee_id=None)`
+
+- **Purpose:** list assignable technicians (earliest free slot **per** technician) so a manager can **choose** — vs `find_available_technician`, which auto-picks one and escalates.
+- **What it does:** `Available` slots on/after `from_date` joined to active `Technician`s, deduped to the earliest per technician; optional `employee_id` restricts to one (empty ⇒ unavailable).
+- **Input:** `from_date: str` (default `REFERENCE_TODAY`), `employee_id: str` (optional).
+- **Output:** `[{employee_id, date, availability_slot, shift_time}, …]` (soonest first) · `[]` if none.
+- **Used by:** Manage Incident (present technicians to choose for assign/reassign).
+- **Edge cases:** excludes supervisor-inserted rows (technicians only); named technician with no free slot → `[]`.
 
 ---
 
@@ -192,11 +210,12 @@ denied with MySQL error 1142.)
 
 ### `book_technician_slot(incident_id, employee_id, date, availability_slot)`
 
-- **Purpose:** assign someone to an open incident and book their slot. Consumes `find_available_technician`'s output (always a date + slot).
-- **What it does (one transaction):** if a `(date, employee_id)` schedule row exists & is `Available` → `UPDATE` it to `Booked` (**technician**); if no row exists → `INSERT` a `Booked` row (**supervisor escalation**, `shift_time` NULL); then `UPDATE incidents` `technician_id` + `work_date` + `work_slot`.
+- **Purpose:** assign someone to an open incident and book their slot. Consumes `find_available_technician`'s output (or a manager-chosen slot from `list_available_technicians`).
+- **What it does (one transaction):** **reassign** — if the incident already has a different assignee/slot, first frees that prior slot (→ `Available`); then if a `(date, employee_id)` schedule row exists & is `Available` → `UPDATE` it to `Booked` (**technician**), or if no row exists → `INSERT` a `Booked` row (**supervisor escalation**, `shift_time` NULL); then `UPDATE incidents` `technician_id` + `work_date` + `work_slot`.
 - **Input:** `incident_id`, `employee_id`, `date` (`YYYY-MM-DD`), `availability_slot` (e.g. `09:00-11:00`).
-- **Output:** `{ok: True, incident_id, employee_id, assignment_type: "technician"|"supervisor", booked_slot:{date, availability_slot}}` · `{ok: False, error}`.
-- **Used by:** Action (after `find_available_technician`).
+- **Output:** `{ok: True, incident_id, employee_id, assignment_type: "technician"|"supervisor", booked_slot:{date, availability_slot}, reassigned_from}` · `{ok: False, error}`.
+- **Used by:** Action, Manage Incident (after `find_available_technician` / a chosen slot).
+- **Edge cases:** unknown/closed incident → reject; unknown employee → reject; slot already `Booked` → reject (availability enforced — no overload); **reassign** auto-frees the prior assignee's slot (`reassigned_from`).
 - **Edge cases:** unknown/closed incident → reject; unknown employee → reject; slot already `Booked` → reject; supervisor (no calendar row) → a new `Booked` row is inserted for them.
 
 ### `update_incident(incident_id, technician_comments, close=True)`

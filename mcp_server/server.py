@@ -32,8 +32,10 @@ from read.get_machine import get_machine
 from read.get_overdue_status import get_overdue_status
 from read.get_maintenance_history import get_maintenance_history
 from read.get_incident_history import get_incident_history
+from read.get_incident import get_incident
 from read.check_inventory import check_inventory
 from read.find_available_technician import find_available_technician
+from read.list_available_technicians import list_available_technicians
 from rag_wrappers.user_manual_retrieval import user_manual_retrieval
 from rag_wrappers.safety_retrieval import safety_retrieval
 from write.create_incident import create_incident
@@ -47,7 +49,8 @@ from mcp.server.fastmcp import FastMCP
 # --- tool groups, split by transport ---
 LOCAL_DATA_TOOLS = [
     get_machine, get_overdue_status, get_maintenance_history,
-    get_incident_history, check_inventory, find_available_technician,
+    get_incident_history, get_incident, check_inventory,
+    find_available_technician, list_available_technicians,
     user_manual_retrieval, safety_retrieval,
     create_incident, book_technician_slot, update_incident,
 ]

@@ -44,8 +44,10 @@ class State(TypedDict, total=False):
 
     # --- decision & action ---
     decision_path: Optional[str]               # "self" | "technician"
+    manage_plan: Optional[dict]                # Manage Incident plan (+ enrichment)
     requires_approval: bool
     approval: Optional[str]                    # "approved" | "rejected"
+    email_dry_run: bool                        # if True, send_email composes but doesn't send
     action_result: Optional[dict]
 
     # --- analytics (text-to-SQL coder <-> reviewer loop) ---

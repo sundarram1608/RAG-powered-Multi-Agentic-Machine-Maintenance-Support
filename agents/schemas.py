@@ -83,3 +83,15 @@ class SqlReview(BaseModel):
 class SqlAnswer(BaseModel):
     """Output Agent (analytics path) — natural-language answer from the query rows."""
     answer: str = Field(description="Plain-language answer to the analytics question, derived from the query result rows.")
+
+
+class ManagePlan(BaseModel):
+    """Manage Incident Agent (resolve) — the planned action on a known incident."""
+    incident_id: Optional[str] = Field(default=None, description="The incident to act on, e.g. 'inc_26'.")
+    action: Literal["close", "assign", "update_comment", "unsupported"] = Field(
+        description="close = mark complete; assign = (re)assign a technician; update_comment = edit comments without closing; unsupported = not possible.")
+    named_employee: Optional[str] = Field(default=None, description="A specific technician the user named for 'assign' (e.g. 'E05'), else null — availability is checked from live data.")
+    comment: Optional[str] = Field(default=None, description="technician_comments text for close/update_comment (REQUIRED to close; never invented).")
+    plan_summary: str = Field(description="One user-facing sentence describing exactly what will happen (for approval), or why it's unsupported.")
+    needs_clarification: bool = Field(default=False, description="True if a required closing comment is missing.")
+    question: Optional[str] = Field(default=None, description="The clarifying question to ask when needs_clarification is True.")

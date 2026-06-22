@@ -113,14 +113,14 @@ The **Knowledge Base** has two layers and both feed the context to the LLM agent
 The **tools** are the only way the agents act on the Knowledge Base. Each tool is a plain Python function in `mcp_server/mcp_tools/`;
 `mcp_server/server.py` registers them with **FastMCP**, which turns each function's name + docstring + type hints into the schema the LLM sees.
 
-**13 tools, in four groups:**
-- **read (6)** — `get_machine`, `get_overdue_status`, `get_maintenance_history`, `get_incident_history`, `check_inventory`, `find_available_technician` (DB reads).
+**15 tools, in four groups:**
+- **read (8)** — `get_machine`, `get_overdue_status`, `get_maintenance_history`, `get_incident_history`, `get_incident`, `check_inventory`, `find_available_technician`, `list_available_technicians` (DB reads).
 - **rag (2)** — `user_manual_retrieval`, `safety_retrieval` (thin wrappers over `rag/retriever.py`).
 - **write (3)** — `create_incident`, `book_technician_slot`, `update_incident` (scoped writes to `incidents` / `technician_schedule` only).
 - **other (2)** — `run_readonly_query` (LLM-generated read-only SQL), `send_email` (notifications from "Agentic FDM Services").
 
 **Two MCP transports** (both operational — see `mcp_server/README.md`):
-- **stdio** (default) serves the 11 local-data tools (read + rag + write); the agent auto-spawns it.
+- **stdio** (default) serves the 13 local-data tools (read + rag + write); the agent auto-spawns it.
 - **streamable-HTTP** (`127.0.0.1:8000`) serves the 2 "service" tools (`run_readonly_query`, `send_email`) as a separate process.
 
 **Safety & PII**: three MySQL identities — admin, `maint_readonly` (SELECT only, for generated SQL), and `maint_write` (INSERT/UPDATE on the two
@@ -135,7 +135,7 @@ python mcp_server/server.py http        # -> http://127.0.0.1:8000/mcp
 # (the stdio server is auto-spawned by the agent; run by hand: python mcp_server/server.py)
 
 # smoke test — list the tools each transport exposes
-python mcp_server/server.py --selftest  # expect 11 stdio + 2 http tools
+python mcp_server/server.py --selftest  # expect 13 stdio + 2 http tools
 ```
 For live `send_email`, also set `AGENT_EMAIL` + `AGENT_EMAIL_APP_PASSWORD` in `.env`.
 Full guide → [`mcp_server/README.md`](mcp_server/README.md)

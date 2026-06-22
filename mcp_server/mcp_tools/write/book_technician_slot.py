@@ -5,7 +5,9 @@ Scoped write (one transaction via the least-privilege write user):
   * technician (schedule row exists & Available) -> UPDATE it to 'Booked';
   * supervisor escalation (no schedule row)      -> INSERT a 'Booked' row;
 then UPDATE the incident's technician_id + work_date + work_slot.
-Used by: Action (after find_available_technician).
+On REASSIGN (the incident already had a different assignee/slot), the prior slot
+is first freed (set back to 'Available') in the same transaction.
+Used by: Action, Manage Incident (after find_available_technician / a chosen slot).
 """
 
 import sys
@@ -32,7 +34,8 @@ def book_technician_slot(incident_id: str, employee_id: str, date: str,
         availability_slot: The slot window, e.g. "09:00-11:00".
 
     Returns:
-        {ok: True, incident_id, employee_id, assignment_type, booked_slot:{date, availability_slot}}
+        {ok: True, incident_id, employee_id, assignment_type,
+         booked_slot:{date, availability_slot}, reassigned_from}   # prior assignee freed, or None
         {ok: False, error}   # unknown/closed incident, unknown employee, slot already booked
     """
     incident_id = (incident_id or "").strip()
@@ -41,7 +44,8 @@ def book_technician_slot(incident_id: str, employee_id: str, date: str,
     availability_slot = (availability_slot or "").strip()
 
     incident = run_query(
-        "SELECT incident_closure_date FROM incidents WHERE incident_id=%s",
+        "SELECT technician_id, work_date, incident_closure_date "
+        "FROM incidents WHERE incident_id=%s",
         (incident_id,),
     )
     if not incident:
@@ -59,6 +63,20 @@ def book_technician_slot(incident_id: str, employee_id: str, date: str,
     )
 
     statements = []
+
+    # Reassign: if the incident already has a different assignee/slot, free that
+    # old slot (set it back to Available) before booking the new one.
+    old_emp = incident[0]["technician_id"]
+    old_date = incident[0]["work_date"]
+    reassigned_from = None
+    if old_emp and old_date and (str(old_date), old_emp) != (date, employee_id):
+        reassigned_from = old_emp
+        statements.append((
+            "UPDATE technician_schedule SET availability_status='Available' "
+            "WHERE `date`=%s AND employee_id=%s",
+            (str(old_date), old_emp),
+        ))
+
     if existing:
         if existing[0]["availability_status"] == "Booked":
             return {"ok": False,
@@ -91,6 +109,7 @@ def book_technician_slot(incident_id: str, employee_id: str, date: str,
         "employee_id": employee_id,
         "assignment_type": assignment_type,
         "booked_slot": {"date": date, "availability_slot": availability_slot},
+        "reassigned_from": reassigned_from,   # prior assignee freed, or None
     }
 
 

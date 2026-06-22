@@ -1,0 +1,251 @@
+"""
+manage_incident.py — Manage Incident Agent: direct actions on a KNOWN incident.
+
+Two phases (one agent), with an approval/clarification interrupt between:
+  manage_resolve : resolve the incident (get_incident) + LLM-plan the action
+                   (close / assign / update_comment / unsupported). For "assign"
+                   it resolves a technician from LIVE availability
+                   (list_available_technicians) — named-&-available → propose;
+                   else present the list and ask the manager to choose.
+  manage_execute : mechanical — perform the approved action via the write/booking
+                   tools and notify (send_email).
+
+The availability rules live HERE (the node), not the prompt: the LLM only extracts
+intent (action + named technician); the node enforces who is actually free.
+
+LLM (resolve): Groq Llama 3.3 70B. execute: no LLM.
+Tools: get_incident, list_available_technicians, book_technician_slot,
+       update_incident, send_email.
+Input  (reads state): user_input (+ carried manage_plan on resume), current_user_id.
+Output (writes state): manage_plan (+ enrichment), needs_clarification /
+       clarification_question / requires_approval; execute -> action_result;
+       prompt_versions["manage_incident"].
+Structured output: Pydantic `ManagePlan` via with_structured_output.
+"""
+
+import re
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # agents/ on path
+import config
+import mcp_client
+from llms import get_reasoner
+from schemas import ManagePlan
+from prompts.manage_incident import MANAGE_RESOLVE_SYSTEM, MANAGE_RESOLVE_VERSION
+
+from langchain_core.messages import HumanMessage, SystemMessage
+
+_INC_RE = re.compile(r"inc_\d+", re.IGNORECASE)
+_EMP_RE = re.compile(r"E\d+", re.IGNORECASE)
+
+
+async def _call(name: str, args: dict, expect_list: bool = False):
+    tools = await mcp_client.get_all_tools()
+    tool = next(t for t in tools if t.name == name)
+    return mcp_client.parse_tool_result(await tool.ainvoke(args), expect_list=expect_list)
+
+
+async def _list_techs(employee_id=None):
+    args = {"employee_id": employee_id} if employee_id else {}
+    return await _call("list_available_technicians", args, expect_list=True)
+
+
+def _fmt(techs: list) -> str:
+    return "; ".join(f"{t['employee_id']} ({t['date']} {t['availability_slot']})"
+                     for t in techs) or "(none available)"
+
+
+def _clarify(plan: dict, question: str, versions: dict) -> dict:
+    plan = {**plan, "needs_clarification": True, "question": question}
+    return {"manage_plan": plan, "needs_clarification": True,
+            "clarification_question": question, "prompt_versions": versions}
+
+
+async def manage_resolve(state: dict) -> dict:
+    user_input = state.get("user_input", "")
+    versions = dict(state.get("prompt_versions", {}))
+    versions["manage_incident"] = MANAGE_RESOLVE_VERSION
+    prior = state.get("manage_plan") or {}
+
+    # --- resume: we previously asked the manager to choose a technician ---
+    if prior.get("action") == "assign" and prior.get("needs_clarification"):
+        m = _EMP_RE.search(user_input)
+        if m:
+            named = m.group(0).upper()
+            avail = await _list_techs(named)
+            if avail:
+                t = avail[0]
+                plan = {**prior, "named_employee": named, "assign_target": t,
+                        "needs_clarification": False,
+                        "plan_summary": f"Assign {named} ({t['date']} {t['availability_slot']}) "
+                                        f"to {prior['incident_id']}.", "requires_approval": True}
+                return {"manage_plan": plan, "requires_approval": True, "prompt_versions": versions}
+            all_av = await _list_techs()
+            return _clarify({**prior, "named_employee": named},
+                            f"{named} has no free slot. Available: {_fmt(all_av)}. "
+                            f"Which should I assign?", versions)
+
+    # --- resolve the incident id (carried, else from the text) ---
+    incident_id = prior.get("incident_id")
+    if not incident_id:
+        match = _INC_RE.search(user_input)
+        incident_id = match.group(0).lower() if match else None
+    if not incident_id:
+        return _clarify({"action": None, "incident_id": None},
+                        "Which incident? Please give its id, e.g. inc_26.", versions)
+
+    incident = await _call("get_incident", {"incident_id": incident_id})
+    if not incident.get("exists"):
+        return _clarify({"action": None, "incident_id": incident_id},
+                        f"I couldn't find incident {incident_id}. Please confirm the id.", versions)
+
+    # --- LLM plans the action from the request + live incident details ---
+    details = (f"incident_id={incident['incident_id']}, machine={incident['machine_id']}, "
+               f"status={incident['status']}, current_assignee={incident.get('technician_id')}, "
+               f"work_date={incident.get('work_date')}")
+    plan = get_reasoner().with_structured_output(ManagePlan).invoke([
+        SystemMessage(content=MANAGE_RESOLVE_SYSTEM),
+        HumanMessage(content=f"User request: {user_input}\n\nIncident details: {details}"),
+    ])
+    pd = plan.model_dump()
+    pd["incident_id"] = incident_id
+    pd["reported_by"] = incident.get("reported_by")   # for operator notification
+
+    if pd.get("needs_clarification"):                 # e.g. close without a comment
+        return _clarify(pd, pd.get("question") or "Could you clarify the request?", versions)
+
+    if pd["action"] == "assign":
+        named = pd.get("named_employee")
+        if named:
+            avail = await _list_techs(named)
+            if avail:
+                t = avail[0]
+                pd.update(assign_target=t, requires_approval=True,
+                          plan_summary=f"Assign {named} ({t['date']} {t['availability_slot']}) "
+                                       f"to {incident_id} on {incident['machine_id']}.")
+                return {"manage_plan": pd, "requires_approval": True, "prompt_versions": versions}
+            all_av = await _list_techs()
+            return _clarify(pd, f"{named} has no free slot. Available: {_fmt(all_av)}. "
+                                f"Which should I assign?", versions)
+        all_av = await _list_techs()
+        if not all_av:
+            pd.update(action="unsupported", plan_summary="No technicians are currently available to assign.")
+            return {"manage_plan": pd, "prompt_versions": versions}
+        return _clarify(pd, f"Which technician should I assign to {incident_id} on "
+                            f"{incident['machine_id']}? Available: {_fmt(all_av)}.", versions)
+
+    pd["requires_approval"] = pd["action"] in ("close", "update_comment")
+    return {"manage_plan": pd, "requires_approval": pd["requires_approval"],
+            "prompt_versions": versions}
+
+
+async def manage_execute(state: dict) -> dict:
+    """Mechanical: perform the approved action and notify (no LLM)."""
+    plan = state["manage_plan"]
+    action, inc = plan["action"], plan["incident_id"]
+    dry = state.get("email_dry_run", False)
+    emails = []
+
+    if action == "close":
+        result = await _call("update_incident",
+                             {"incident_id": inc, "technician_comments": plan["comment"], "close": True})
+        if plan.get("reported_by"):
+            await _call("send_email", {"to_employee_id": plan["reported_by"], "incident_id": inc, "dry_run": dry})
+            emails.append(plan["reported_by"])
+        return {"action_result": {"action": "close", "result": result, "emails_sent": emails}}
+
+    if action == "update_comment":
+        result = await _call("update_incident",
+                             {"incident_id": inc, "technician_comments": plan["comment"], "close": False})
+        return {"action_result": {"action": "update_comment", "result": result}}
+
+    if action == "assign":
+        t = plan["assign_target"]
+        result = await _call("book_technician_slot",
+                             {"incident_id": inc, "employee_id": t["employee_id"],
+                              "date": t["date"], "availability_slot": t["availability_slot"]})
+        await _call("send_email", {"to_employee_id": t["employee_id"], "incident_id": inc, "dry_run": dry})
+        emails.append(t["employee_id"])
+        if plan.get("reported_by"):
+            await _call("send_email", {"to_employee_id": plan["reported_by"], "incident_id": inc, "dry_run": dry})
+            emails.append(plan["reported_by"])
+        return {"action_result": {"action": "assign", "result": result, "emails_sent": emails}}
+
+    return {"action_result": {"action": action, "note": "no action taken (unsupported)"}}
+
+
+# === SELF-TEST — full resolve(+execute) paths. Needs GROQ key AND the HTTP server:
+#     python mcp_server/server.py http        # (separate terminal)
+#     python agents/nodes/manage_incident.py
+# Uses email_dry_run=True (no real emails) and create-then-clean for writes.
+# ============================================================================
+if __name__ == "__main__":
+    import asyncio
+    sys.path.insert(0, str(config.PROJECT_ROOT / "mcp_server" / "mcp_tools"))
+    sys.path.insert(0, str(config.PROJECT_ROOT / "mcp_server" / "mcp_tools" / "write"))
+    from _common import get_connection
+    from create_incident import create_incident
+
+    def _del(inc_id):
+        c = get_connection(); cur = c.cursor()
+        cur.execute("DELETE FROM incidents WHERE incident_id=%s", (inc_id,))
+        c.commit(); c.close()
+
+    def _free_slot(date, emp):
+        c = get_connection(); cur = c.cursor()
+        cur.execute("UPDATE technician_schedule SET availability_status='Available' "
+                    "WHERE `date`=%s AND employee_id=%s", (date, emp))
+        c.commit(); c.close()
+
+    def _sweep():  # belt-and-suspenders: remove any leftover selftest incidents
+        c = get_connection(); cur = c.cursor()
+        cur.execute("DELETE FROM incidents WHERE user_complaint LIKE '[SELFTEST]%'")
+        c.commit(); c.close()
+
+    async def _resolve_print(label, state):
+        out = await manage_resolve(state)
+        p = out["manage_plan"]
+        print(f"\n[{label}] action={p.get('action')} needs_clar={out.get('needs_clarification', False)} "
+              f"approval={out.get('requires_approval', False)}")
+        print(f"   {out.get('clarification_question') or p.get('plan_summary')}")
+        return out
+
+    async def _main():
+        # --- resolve-only paths (reads) ---
+        await _resolve_print("no id", {"user_input": "please close the incident"})
+        await _resolve_print("unknown id", {"user_input": "close inc_999"})
+
+        # --- close path (create -> resolve -> execute -> verify -> clean) ---
+        inc = create_incident("M01", "E01", "[SELFTEST] manage close", "rc", "res")["incident_id"]
+        await _resolve_print("close no comment", {"user_input": f"mark {inc} complete"})
+        out = await _resolve_print("close w/ comment",
+                                   {"user_input": f"close {inc}; replaced the thermistor and verified"})
+        if out["manage_plan"]["action"] == "close":
+            res = await manage_execute({**out, **out, "email_dry_run": True})
+            print("   execute ->", res["action_result"]["result"].get("status"),
+                  "| emails:", res["action_result"]["emails_sent"])
+        _del(inc)
+
+        # --- assign path (create -> resolve lists -> pick -> execute -> verify -> clean) ---
+        inc2 = create_incident("M01", "E01", "[SELFTEST] manage assign", "rc", "res")["incident_id"]
+        out = await _resolve_print("assign (generic)", {"user_input": f"assign a technician to {inc2}"})
+        # simulate the manager picking the first listed technician
+        import re as _re
+        listed = _re.search(r"E\d+", out["clarification_question"])
+        if listed:
+            pick = listed.group(0)
+            out2 = await _resolve_print(f"assign pick {pick}",
+                                        {"user_input": pick, "manage_plan": out["manage_plan"]})
+            if out2.get("requires_approval"):
+                res = await manage_execute({**out2, "email_dry_run": True})
+                print("   execute ->", res["action_result"]["result"].get("ok"),
+                      "| reassigned_from:", res["action_result"]["result"].get("reassigned_from"),
+                      "| emails:", res["action_result"]["emails_sent"])
+                tgt = out2["manage_plan"]["assign_target"]      # free the slot we booked
+                _free_slot(tgt["date"], tgt["employee_id"])
+        _del(inc2)
+        _sweep()
+        print("\ncleanup done (incidents removed, booked slot freed)")
+
+    asyncio.run(_main())

@@ -24,18 +24,28 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 _client = MultiServerMCPClient(config.MCP_SERVERS)
 
 
-def parse_tool_result(raw):
+def parse_tool_result(raw, expect_list=False):
     """
     Normalize a LangChain-MCP tool result into the tool's native return value.
 
-    The adapter delivers MCP tool output as a list of content blocks
-    (`[{"type": "text", "text": "<json>"}]`); our tools return JSON. This unwraps
-    that to the dict/list the tool actually returned.
+    The adapter delivers MCP tool output as content blocks
+    (`[{"type": "text", "text": "<json>"}, ...]`): a dict-returning tool yields ONE
+    block; a list-returning tool yields ONE block PER element. We parse every block.
+
+    expect_list:
+      - False (default): a single block -> that value (dict/scalar); many -> the list.
+      - True: always return a list (for list-returning tools, even with 0/1 items).
     """
     if isinstance(raw, str):
-        return json.loads(raw)
+        value = json.loads(raw)
+        return ([value] if not isinstance(value, list) else value) if expect_list else value
     if isinstance(raw, list) and raw and isinstance(raw[0], dict) and "text" in raw[0]:
-        return json.loads(raw[0]["text"])
+        parsed = [json.loads(block["text"]) for block in raw]
+        if expect_list:
+            return parsed
+        return parsed[0] if len(parsed) == 1 else parsed
+    if expect_list and raw == []:
+        return []
     return raw
 
 
