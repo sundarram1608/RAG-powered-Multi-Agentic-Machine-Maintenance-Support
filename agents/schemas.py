@@ -21,9 +21,13 @@ class GuardResult(BaseModel):
 
 class Route(BaseModel):
     """Supervisor Agent — intent routing."""
-    next: Literal["troubleshoot", "analytics", "chitchat"] = Field(
-        description="troubleshoot = a machine fault/service request; analytics = a question about existing data (counts, status); chitchat = general/system-capability question.")
-    reason: str = Field(description="Why this route was chosen.")
+    next: Literal["troubleshoot", "analytics", "manage_incident", "general"] = Field(
+        description="troubleshoot = a machine fault/symptom needing diagnosis; "
+                    "analytics = a read-only question about existing data (counts, status, look-ups); "
+                    "manage_incident = a direct action on a KNOWN incident/booking "
+                    "(close/mark-complete, reassign, (re)book, update); "
+                    "general = capabilities / greeting / in-scope small talk.")
+    reason: str = Field(description="Brief reason for the chosen route.")
 
 
 class Intake(BaseModel):

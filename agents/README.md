@@ -38,22 +38,24 @@ human-in-the-loop before anything irreversible.
 | # | Agent | LLM | Tools | Role |
 |---|---|---|---|---|
 | 1 | **Input** | Llama | — | scope + prompt-injection / PII-request guard |
-| 2 | **Supervisor** | Llama | — | route: troubleshoot / analytics / chitchat |
+| 2 | **Supervisor** | Llama | — | route: troubleshoot / analytics / manage_incident / general |
 | 3 | **Analytics** | Llama | `run_readonly_query` | NL → read-only SQL → answer |
-| 4 | **Intake** | Llama | `get_machine` | resolve & validate machine; clarify if needed |
-| 5 | **Diagnosis** | Llama | RAG + DB read tools | gather evidence (corrective-RAG) → root cause + fix |
-| 6 | **Verifier** | **Gemini** | — | judge groundedness/relevance/safety; loop back if weak |
-| 7 | **Decider** | Llama | — | ask the user: self-fix or technician? |
-| 8 | **Self Action** | Llama | RAG + `create_incident`, `update_incident` | guide the operator (with safety); log a self-resolved incident |
-| 9 | **Technician Action** | Llama | `find_available_technician`, `create_incident`, `book_technician_slot`, `update_incident`, `send_email` | book a technician/supervisor, update tables, notify |
-| 10 | **Output** | Llama | — | compose the final reply (+ final PII scrub) |
+| 4 | **Manage Incident** | Llama | write/booking tools *(TBD)* | direct action on a KNOWN incident/booking (close, reassign, (re)book) |
+| 5 | **Intake** | Llama | `get_machine` | resolve & validate machine; clarify if needed |
+| 6 | **Diagnosis** | Llama | RAG + DB read tools | gather evidence (corrective-RAG) → root cause + fix |
+| 7 | **Verifier** | **Gemini** | — | judge groundedness/relevance/safety; loop back if weak |
+| 8 | **Decider** | Llama | — | ask the user: self-fix or technician? |
+| 9 | **Self Action** | Llama | RAG + `create_incident`, `update_incident` | guide the operator (with safety); log a self-resolved incident |
+| 10 | **Technician Action** | Llama | `find_available_technician`, `create_incident`, `book_technician_slot`, `update_incident`, `send_email` | book a technician/supervisor, update tables, notify |
+| 11 | **Output** | Llama | — | compose the final reply (+ final PII scrub) |
 
 **Flow (narrative):** user turn → **Input** (scope/safety) → **Supervisor** routes →
-*analytics* path = **Analytics** → **Output**; *troubleshoot* path = **Intake**
-(clarify via interrupt if details missing) → **Diagnosis** (RAG + DB) → **Verifier**
-(retry loop, capped at `VERIFY_MAX_ATTEMPTS`) → **Decider** (asks the user) →
-**Self Action** *or* **Technician Action** (approval interrupt before writes/email)
-→ **Output**.
+*analytics* = **Analytics** → **Output**; *manage_incident* = **Manage Incident**
+(approval interrupt before writes) → **Output**; *general* = direct **Output**;
+*troubleshoot* = **Intake** (clarify via interrupt if details missing) →
+**Diagnosis** (RAG + DB) → **Verifier** (retry loop, capped at
+`VERIFY_MAX_ATTEMPTS`) → **Decider** (asks the user) → **Self Action** *or*
+**Technician Action** (approval interrupt before writes/email) → **Output**.
 
 ---
 
@@ -141,10 +143,16 @@ The plumbing every node stands on (no nodes yet):
 
 ## Agents (filled in as each is built — Phase 4b)
 
-> Build order: Input → Supervisor → Analytics → Intake → Diagnosis → Verifier →
-> Decider → Self Action → Technician Action → Output. Prompts are versioned in
-> `prompts/<agent>.py` (a `VERSION` + changelog header); each run is tagged with
-> the `prompt_version` it used. Prompt text is not reproduced here.
+> Build order: Input → Supervisor → Analytics → **Manage Incident** → Intake →
+> Diagnosis → Verifier → Decider → Self Action → Technician Action → Output.
+> Prompts are versioned in `prompts/<agent>.py` (a `VERSION` + changelog header);
+> each run is tagged with the `prompt_version` it used. Prompt text is not
+> reproduced here.
+>
+> **Every node** reads/writes the shared `State` and (for reasoning nodes) returns
+> a **Pydantic** model via `llm.with_structured_output(Model)` — so each subsection
+> states the **input format** (state keys read) and **output format** (the Pydantic
+> model + state keys written).
 
 ### 1. Input Agent — `nodes/input.py`  ✅
 - **Purpose:** the front gate — classify each user turn as **in-scope** (FDM maintenance/service/faults, analytics, capabilities, or operational incident/booking actions) **and safe** (no prompt-injection, no PII/credential extraction). Pure classifier; it never answers or acts.
@@ -155,6 +163,16 @@ The plumbing every node stands on (no nodes yet):
 - **Routing:** `input_safe = False` → **Output** (polite refusal carrying `guard_reason`); `True` → **Supervisor**.
 - **Edge cases:** instruction-override / "print your prompt" → `safe=False`; request for an employee's phone/email/credentials → `safe=False` (even when the topic is in-scope); off-domain question → `safe=False`; **operational actions** like "mark incident complete" / "book a technician" → `safe=True` (capability decided downstream); vague/ambiguous but on-topic → `safe=True` (clarified by later agents). **Moderate** strictness — only *clear* overrides/PII are blocked.
 - **Prompt:** `prompts/input.py` · v1.0.0.
+
+### 2. Supervisor Agent — `nodes/supervisor.py`  ✅
+- **Purpose:** the intent router — classify the (already-guarded) turn into exactly one of four routes. Pure router; never answers or acts.
+- **LLM:** **Groq Llama 3.3 70B** (reasoner).
+- **Tools:** none.
+- **Input format** (state keys read): `user_input` (else the last `messages` entry).
+- **Output format** (Pydantic `Route` via `with_structured_output`) → writes state: `intent` (`"troubleshoot" | "analytics" | "manage_incident" | "general"`), `prompt_versions["supervisor"]`.
+- **Routing:** `troubleshoot` → **Intake** · `analytics` → **Analytics** · `manage_incident` → **Manage Incident** · `general` → **Output**.
+- **Edge cases:** READ data question → `analytics`, WRITE/action on a known record → `manage_incident`; a symptom that needs diagnosing → `troubleshoot` (even if "log it" is mentioned); capability/greeting → `general`; ambiguous-but-actionable → `troubleshoot` (Intake clarifies, avoiding dead-ends).
+- **Prompt:** `prompts/supervisor.py` · v1.0.0.
 
 ## Graph assembly (Phase 4c)
 
