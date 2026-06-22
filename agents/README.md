@@ -222,6 +222,17 @@ The plumbing every node stands on (no nodes yet):
 - **Edge cases:** missing machine id → ask which machine; unknown machine (`exists: False`) → ask to confirm the id; **Decommissioned** → ask if the machine number is correct (it's retired/not serviceable); missing symptom → ask what the problem is; **Under Maintenance / Idle** still proceed.
 - **Prompt:** `prompts/intake.py` · v1.0.0.
 
+### 7. Diagnosis Agent — `nodes/diagnosis.py`  ✅
+- **Purpose:** the core reasoner — given `mvc_code` + `symptom`, gather evidence and produce a **grounded** `Diagnosis` (root cause + fix). Feeds the Verifier.
+- **LLM:** **Groq Llama 3.3 70B** (synthesis only — the node calls the tools).
+- **Tools:** `user_manual_retrieval`, `safety_retrieval`, `get_overdue_status`, `get_maintenance_history`, `get_incident_history`, `check_inventory`.
+- **Orchestrated (not ReAct):** the node gathers a fixed evidence bundle concurrently (manual + safety RAG, overdue, service history, prior incidents), the LLM synthesizes, then **corrective-RAG** re-queries the manual (query sharpened with the hypothesised `root_cause`) while `retrieval_confidence == "low"`, capped at `MAX_DIAGNOSIS_REQUERIES = 3`; finally `check_inventory` looks up stock for any `parts_needed`.
+- **Input format** (state read): `machine_id`, `mvc_code`, `symptom`.
+- **Output format** (Pydantic `Diagnosis` via `with_structured_output`) → state: `diagnosis` (`root_cause`, `evidence`, `fix_steps`, `needs_technician`, `parts_needed`, `safety_notes`, `retrieval_confidence`), `retrieved_context` (manual+safety chunks, for the Verifier), `db_facts` (overdue/history/incidents/parts-availability); tags `prompt_versions["diagnosis"]`.
+- **Routing:** → **Verifier** (judges grounding/relevance/safety; loops back here, capped at `VERIFY_MAX_ATTEMPTS = 3`).
+- **Edge cases:** weak manual coverage → `low` confidence → CRAG re-query; **overdue** machine weighted as a strong signal; prior incident reused; grounds strictly in provided evidence (Verifier enforces). `safety_retrieval` is always called; the LLM keeps only *relevant* `safety_notes`.
+- **Prompt:** `prompts/diagnosis.py` · v1.0.0.
+
 ## Graph assembly (Phase 4c)
 
 > `graph.py`: `StateGraph`, edges + conditional edges (clarification, verification
