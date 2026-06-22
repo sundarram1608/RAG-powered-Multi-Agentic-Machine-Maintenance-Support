@@ -233,6 +233,17 @@ The plumbing every node stands on (no nodes yet):
 - **Edge cases:** weak manual coverage → `low` confidence → CRAG re-query; **overdue** machine weighted as a strong signal; prior incident reused; grounds strictly in provided evidence (Verifier enforces). `safety_retrieval` is always called; the LLM keeps only *relevant* `safety_notes`.
 - **Prompt:** `prompts/diagnosis.py` · v1.0.0.
 
+### 8. Verifier Agent — `nodes/verifier.py`  ✅
+- **Purpose:** independent **LLM-as-judge** over the Diagnosis, using the **RAG triad + safety** across two relationships: *context↔query* and *diagnosis↔context/query*.
+- **LLM:** **Gemini 2.5 Flash** (a different model family than the Llama diagnoser → independent judgment, fewer correlated blind spots).
+- **Tools:** none (judges the evidence already in state).
+- **Input format** (state read): `symptom`, `retrieved_context` (manual+safety), `db_facts`, `diagnosis`.
+- **Output format** (Pydantic `Verdict` via `with_structured_output`) → state: `verdict` (`context_relevant`, `grounded`, `answer_relevant`, `safe`, `approved`, `score`, `issues`), increments `verify_attempts`; tags `prompt_versions["verifier"]`.
+- **Dimensions:** `context_relevant` (retrieval on-target for the query) · `grounded` (diagnosis supported by context — *sound inference allowed*; flags fabrication/contradiction/inconsistency; `needs_technician`/`parts_needed` judged as reasonable operational calls) · `answer_relevant` (addresses the symptom) · `safe` (respects the safety passages).
+- **Loop:** `approved = context_relevant ∧ grounded ∧ answer_relevant ∧ safe`. approved → **Decider**; else (and `verify_attempts < VERIFY_MAX_ATTEMPTS = 3`) → back to **Diagnosis** with `issues` (a context failure re-retrieves; a grounding failure re-synthesizes); attempts exhausted → proceed flagged.
+- **Edge cases:** ungrounded/irrelevant claim → reject with actionable issues; off-topic retrieval → `context_relevant=False`; fix contradicts safety → `safe=False`; strict default (not-approved when unsure).
+- **Prompt:** `prompts/verifier.py` · v1.0.0.
+
 ## Graph assembly (Phase 4c)
 
 > `graph.py`: `StateGraph`, edges + conditional edges (clarification, verification

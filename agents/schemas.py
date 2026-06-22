@@ -51,12 +51,14 @@ class Diagnosis(BaseModel):
 
 
 class Verdict(BaseModel):
-    """Verifier Agent — LLM-as-judge over the diagnosis."""
-    grounded: bool = Field(description="True if the root cause + fix are actually supported by the cited evidence (no hallucination).")
-    relevant: bool = Field(description="True if the diagnosis addresses the user's actual symptom.")
-    safe: bool = Field(description="True if the fix respects the safety guidance.")
-    score: int = Field(description="Overall quality score, 1 (poor) to 5 (excellent).")
-    issues: List[str] = Field(default_factory=list, description="Specific problems found; empty list if none.")
+    """Verifier Agent — independent RAG-triad + safety judge of the diagnosis."""
+    context_relevant: bool = Field(description="True if the retrieved CONTEXT passages actually pertain to the user's symptom (right topic/machine) — i.e. retrieval was on-target.")
+    grounded: bool = Field(description="True if EVERY claim in the diagnosis (root cause, fix steps) is supported by the context — no fabrication beyond the evidence.")
+    answer_relevant: bool = Field(description="True if the diagnosis addresses the user's actual symptom (not a different problem).")
+    safe: bool = Field(description="True if the fix steps respect the safety passages.")
+    approved: bool = Field(description="True ONLY if context_relevant AND grounded AND answer_relevant AND safe.")
+    score: int = Field(description="Overall quality, 1 (poor) to 5 (excellent).")
+    issues: List[str] = Field(default_factory=list, description="Specific, actionable problems for the Diagnosis agent to fix; empty if approved.")
 
 
 class Decision(BaseModel):
