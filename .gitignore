@@ -1,0 +1,56 @@
+# ---- Virtual environment ----
+preventivemaintenance3.11/
+.venv/
+venv/
+env/
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# ---- Environment / secrets ----
+.env
+.env.*
+!.env.example
+*.key
+
+# ---- Source documents (large PDFs; fetched via download, not committed) ----
+synthetic_data/documents/**/*.pdf
+# keep ATTRIBUTIONS.md and any generated text/markdown references tracked
+!synthetic_data/documents/ATTRIBUTIONS.md
+
+# ---- Project data stores ----
+# local databases (SQLite stand-ins for CMMS / inventory / sensors)
+*.db
+*.sqlite
+*.sqlite3
+# Chroma vector store
+chroma/
+chroma_db/
+.chroma/
+rag/chroma_store/
+
+# ---- Caches / tooling ----
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+*.log
+
+# ---- HuggingFace / model caches ----
+.huggingface/
+hf_cache/
+
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
