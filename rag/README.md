@@ -10,10 +10,18 @@ the LulzBot manuals + the NIOSH safety guide. Structured facts come from MySQL
 1. **Ingestion** (offline, build the index once):
   `load PDFs → tag with mvc metadata → semantic chunking → embed (BGE-M3) → store in ChromaDB`
 2. **Retrieval** (per query, at agent runtime):
-  `embed the query → similarity search in Chroma, filtered by the machine's mvc_code → return top-k passages to the agent`
+  `embed the query → mvc-filtered cosine search in Chroma (wider candidate set) → rerank with a cross-encoder → return top-k passages to the agent`
    *(in `retriever.py`; exposed to the agents as the MCP RAG tools)*
 
-Both phases use the **same embedding model** (BGE-M3) — they must share a vector space.
+Both phases use the **same embedding model** (BGE-M3) — they must share a vector
+space. Retrieval adds a **cross-encoder reranker** (`bge-reranker-v2-m3`) on top.
+
+> **Reranking is query-time only.** It re-scores `(query, chunk-text)` pairs and
+> reorders the candidates — it does **not** touch the stored embeddings, the
+> ingestion pipeline, or the index, so it needs no re-ingestion and can be tuned
+> or removed freely. Systematic RAG **evaluation** (context precision/recall,
+> faithfulness) is added in **Phase 5** with LangSmith, which will validate/tune
+> the reranker (candidate count, `max_length`) — or disable it if it doesn't help.
 
 ## Directory
 
@@ -26,7 +34,8 @@ rag/
 ├── embeddings.py             # Step 5 — embed the chunks
 ├── vectorstore.py            # Step 6 — ChromaDB (build/persist)
 ├── orchestrator.py           # entrypoint — runs steps 1 → 6
-├── retriever.py              # retrieval phase (query-time)
+├── reranker_loader.py        # query-time — load bge-reranker-v2-m3 (cross-encoder)
+├── retriever.py              # retrieval phase (query-time): dense candidates -> rerank -> top-k
 └── chroma_store/             # generated index (git-ignored)
 ```
 
@@ -266,16 +275,27 @@ and rebuilds the index from scratch.
 ## Retrieval phase (`retriever.py`)
 
 The retrieval side of RAG — what the agent calls at query time. Two single-purpose
-functions, each embeds the query with the **same BGE-M3 model** and runs a
-metadata-filtered cosine search over the persisted Chroma index:
+functions, each embeds the query with the **same BGE-M3 model**, runs a
+metadata-filtered cosine search over the persisted Chroma index to fetch a wider
+**candidate set** (`RERANK_CANDIDATES = 20`), then **reranks** those candidates with
+the `bge-reranker-v2-m3` cross-encoder (`reranker_loader.py`) and keeps the top-k:
 
 - **`user_manual_retrieval(query, mvc_code, k=5)`** → top-k **manual** chunks for that
   machine version (`where={"mvc_code": mvc_code}`).
 - **`safety_retrieval(query, k=2)`** → top-k **safety-guide** chunks
   (`where={"doc_type": "safety"}`).
 
-Each returns `{text, metadata, distance}` (smaller distance = more similar);
-`metadata` carries `source_file` + `page_start/page_end` for citations.
+Each returns `{text, metadata, distance, rerank_score}`, ordered by **`rerank_score`**
+(higher = more relevant); `distance` is the original cosine distance, kept for
+reference; `metadata` carries `source_file` + `page_start/page_end` for citations.
+(The MCP RAG-wrapper tools flatten these to `{text, source_file, page_start,
+page_end, distance}` — the rerank just improves the ordering, so the wrapper shape
+is unchanged.)
+
+- **Reranking is query-time only** — re-scores chunk *text* vs the query; the stored
+  embeddings/index are untouched. Candidate count and reranker `max_length`
+  (env `RERANK_MAX_LENGTH`, default 512) are tunable; **Phase 5** RAG eval validates
+  whether reranking helps and tunes these (or disables it).
 
 - **Two separate functions (not one combined search):** a combined `mvc OR safety`
   search could let manual chunks crowd safety out of the top-k. Separate functions
@@ -295,4 +315,5 @@ Each returns `{text, metadata, distance}` (smaller distance = more similar);
 python rag/retriever.py
 # runs one manual query (MVC01) + one safety query against the live chroma_store
 # (requires the orchestrator/ingestion to have run first)
+# first run also downloads bge-reranker-v2-m3 (cached locally, free; no API)
 ```
