@@ -215,8 +215,7 @@ denied with MySQL error 1142.)
 - **Input:** `incident_id`, `employee_id`, `date` (`YYYY-MM-DD`), `availability_slot` (e.g. `09:00-11:00`).
 - **Output:** `{ok: True, incident_id, employee_id, assignment_type: "technician"|"supervisor", booked_slot:{date, availability_slot}, reassigned_from}` · `{ok: False, error}`.
 - **Used by:** Action, Manage Incident (after `find_available_technician` / a chosen slot).
-- **Edge cases:** unknown/closed incident → reject; unknown employee → reject; slot already `Booked` → reject (availability enforced — no overload); **reassign** auto-frees the prior assignee's slot (`reassigned_from`).
-- **Edge cases:** unknown/closed incident → reject; unknown employee → reject; slot already `Booked` → reject; supervisor (no calendar row) → a new `Booked` row is inserted for them.
+- **Edge cases:** unknown/closed incident → reject; unknown employee → reject; slot already `Booked` → reject (availability enforced — no overload); supervisor (no calendar row) → a new `Booked` row is inserted; **reassign** auto-frees the prior assignee's slot (`reassigned_from`).
 
 ### `update_incident(incident_id, technician_comments, close=True)`
 

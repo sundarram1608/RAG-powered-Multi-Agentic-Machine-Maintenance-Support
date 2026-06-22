@@ -106,7 +106,7 @@ Switching providers is a one-line change in `llms.py`. Keys: `GROQ_API_KEY`,
 The agents connect to **both** MCP servers at once via
 `langchain-mcp-adapters`' `MultiServerMCPClient` (`mcp_client.py`):
 
-- **stdio** (`local_data`) — auto-spawned; the 11 read/RAG/write tools.
+- **stdio** (`local_data`) — auto-spawned; the 13 read/RAG/write tools.
 - **streamable-HTTP** (`services`, `127.0.0.1:8000`) — separate process; `run_readonly_query`, `send_email`.
 
 `get_all_tools()` returns the union (15 tools); `tools_for(agent, tools)` filters

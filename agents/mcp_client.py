@@ -1,7 +1,7 @@
 """
 mcp_client.py — the bridge from the agents to the MCP tool servers.
 
-Connects to BOTH MCP servers at once via MultiServerMCPClient (stdio for the 11
+Connects to BOTH MCP servers at once via MultiServerMCPClient (stdio for the 13
 local-data tools + streamable-HTTP for the 2 service tools) and exposes them as
 LangChain tools. `tools_for(agent)` filters that union down to each agent's
 allow-list (config.AGENT_TOOLS) — this is what enforces per-agent least privilege.

@@ -31,7 +31,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 # ── MCP servers (the agents connect to BOTH at once) ──
-#   local_data : stdio  — auto-spawned; the 11 read/RAG/write tools
+#   local_data : stdio  — auto-spawned; the 13 read/RAG/write tools
 #   services   : HTTP   — separate process; run_readonly_query + send_email
 MCP_SERVERS = {
                 "local_data": {
