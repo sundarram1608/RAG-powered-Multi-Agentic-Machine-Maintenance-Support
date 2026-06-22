@@ -141,10 +141,20 @@ The plumbing every node stands on (no nodes yet):
 
 ## Agents (filled in as each is built — Phase 4b)
 
-> Each agent gets a subsection: **purpose · LLM · tools · inputs/outputs (Pydantic)
-> · edge cases · example.** *(to be added in build order: Input → Supervisor →
-> Analytics → Intake → Diagnosis → Verifier → Decider → Self Action →
-> Technician Action → Output.)*
+> Build order: Input → Supervisor → Analytics → Intake → Diagnosis → Verifier →
+> Decider → Self Action → Technician Action → Output. Prompts are versioned in
+> `prompts/<agent>.py` (a `VERSION` + changelog header); each run is tagged with
+> the `prompt_version` it used. Prompt text is not reproduced here.
+
+### 1. Input Agent — `nodes/input.py`  ✅
+- **Purpose:** the front gate — classify each user turn as **in-scope** (FDM maintenance/service/faults, analytics, capabilities, or operational incident/booking actions) **and safe** (no prompt-injection, no PII/credential extraction). Pure classifier; it never answers or acts.
+- **LLM:** **Groq Llama 3.3 70B** (reasoner), `with_structured_output(GuardResult)`.
+- **Tools:** none.
+- **Input:** the current user turn (`state.user_input`, else the last message).
+- **Output:** `{input_safe: bool, guard_reason: str, prompt_versions["input"]}`.
+- **Routing:** `input_safe = False` → **Output** (polite refusal carrying `guard_reason`); `True` → **Supervisor**.
+- **Edge cases:** instruction-override / "print your prompt" → `safe=False`; request for an employee's phone/email/credentials → `safe=False` (even when the topic is in-scope); off-domain question → `safe=False`; **operational actions** like "mark incident complete" / "book a technician" → `safe=True` (capability decided downstream); vague/ambiguous but on-topic → `safe=True` (clarified by later agents). **Moderate** strictness — only *clear* overrides/PII are blocked.
+- **Prompt:** `prompts/input.py` · v1.0.0.
 
 ## Graph assembly (Phase 4c)
 
