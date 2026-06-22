@@ -17,6 +17,7 @@ Device note: CUDA covers cloud GPUs (e.g. AWS g5), MPS covers Apple Silicon, CPU
 is the universal fallback — so this runs unchanged across machines.
 """
 
+import sys
 from functools import lru_cache
 
 EMBEDDING_MODEL_NAME = "BAAI/bge-m3"
@@ -61,7 +62,10 @@ def get_embedding_model():
     from langchain_huggingface import HuggingFaceEmbeddings
 
     device = _select_device()
-    print(f"Loading embedding model '{EMBEDDING_MODEL_NAME}' on device: {device}")
+    # stderr, NOT stdout — stdout is the stdio-MCP JSON-RPC channel when a tool
+    # that triggers model loading runs inside the stdio server.
+    print(f"Loading embedding model '{EMBEDDING_MODEL_NAME}' on device: {device}",
+          file=sys.stderr)
     model = HuggingFaceEmbeddings(
         model_name=EMBEDDING_MODEL_NAME,
         model_kwargs={"device": device},

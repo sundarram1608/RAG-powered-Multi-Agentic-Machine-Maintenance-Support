@@ -13,6 +13,7 @@ Device selection is shared with the embedder (env EMBEDDING_DEVICE override → 
 """
 
 import os
+import sys
 from functools import lru_cache
 
 from sentence_transformers import CrossEncoder
@@ -28,5 +29,6 @@ RERANK_MAX_LENGTH = int(os.getenv("RERANK_MAX_LENGTH", "512"))
 def get_reranker() -> CrossEncoder:
     """Return a cached BGE cross-encoder reranker (loaded once)."""
     device = _select_device()
-    print(f"Loading reranker '{RERANKER_MODEL_NAME}' on device: {device}")
+    # stderr, NOT stdout (stdout is the stdio-MCP JSON-RPC channel).
+    print(f"Loading reranker '{RERANKER_MODEL_NAME}' on device: {device}", file=sys.stderr)
     return CrossEncoder(RERANKER_MODEL_NAME, device=device, max_length=RERANK_MAX_LENGTH)
