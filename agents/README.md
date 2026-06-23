@@ -264,6 +264,15 @@ The plumbing every node stands on (no nodes yet):
 - **Edge cases:** `current_user_id` missing / `create_incident` validation fails → `action_result.action = "error"`; incident logged closed same-day; uses the `update_incident` `assignee_id` extension (operator as resolver, no booking).
 - **Prompt:** none (mechanical node).
 
+### 11. Technician Action Agent — `nodes/technician_action.py`  ✅
+- **Purpose:** the dispatch path — reached when technician-required (Diagnosis `needs_technician`), Decider→technician, or Self Action→"book a technician instead". **Always creates the incident** (it doesn't exist yet on any of these paths), auto-assigns, books, and notifies. **Mechanical — no LLM, no approval, no interrupt** (the dispatch was already decided upstream).
+- **LLM:** none. **Tools:** `create_incident`, `find_available_technician`, `book_technician_slot`, `update_incident` (allow-listed; unused at dispatch), `send_email`.
+- **Flow:** `create_incident(reported_by=operator)` → `find_available_technician` (3-day hierarchy → **supervisor escalation** if none) → `book_technician_slot` → `send_email` to **assignee + operator**. The incident stays **open** (the assignee closes it later via Manage Incident).
+- **Assignee = technician *or* supervisor:** on escalation the assignee is a supervisor (`assignee_role: "Supervisor"`, `escalated: True`); `send_email` picks the template by the recipient's role (technician = work-assignment, supervisor = escalation, operator = report-confirmation).
+- **Input format** (state read): `machine_id`, `symptom`, `diagnosis`, `current_user_id`, optional `booking_moment`, `email_dry_run`. **Output format:** `action_result` (`technician_assigned` with assignee/role/slot/escalated, or `no_assignee`, or `error`).
+- **Edge cases:** no technician in 3 days → supervisor escalation; no active staff at all → `no_assignee`; `create_incident` fails → `error`.
+- **Prompt:** none (mechanical node).
+
 ## Graph assembly (Phase 4c)
 
 > `graph.py`: `StateGraph`, edges + conditional edges (clarification, verification
