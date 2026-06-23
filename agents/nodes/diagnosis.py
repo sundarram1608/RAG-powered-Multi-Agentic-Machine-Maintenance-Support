@@ -32,6 +32,18 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 _MAX_CHUNK_CHARS = 1500   # cap each passage in the prompt to control token size
 
+# Operator-swappable consumables (do NOT force a technician for these).
+_CONSUMABLE_KEYWORDS = ("filament", "glue", "spool", "pla", "abs", "petg", "nylon")
+
+
+def _is_consumable(part_name: str, inventory_rows: list) -> bool:
+    """True if the part is an operator-swappable consumable (by inventory category
+    or name) — anything else is treated as a hardware spare (-> technician)."""
+    if any((row.get("category") or "").lower() == "consumable" for row in inventory_rows):
+        return True
+    name = (part_name or "").lower()
+    return any(kw in name for kw in _CONSUMABLE_KEYWORDS)
+
 
 def _fmt_chunks(chunks: list) -> str:
     if not chunks:
@@ -105,8 +117,17 @@ async def diagnosis_node(state: dict) -> dict:
         parts_availability[part] = await call("check_inventory", {"part": part}, expect_list=True)
     db_facts["parts_availability"] = parts_availability
 
+    dx = diagnosis.model_dump()
+    # Deterministic safety backstop: a non-consumable hardware part always requires
+    # a technician, even if the LLM marked it operator-fixable.
+    if dx.get("parts_needed") and any(
+        not _is_consumable(part, parts_availability.get(part, []))
+        for part in dx["parts_needed"]
+    ):
+        dx["needs_technician"] = True
+
     return {
-        "diagnosis": diagnosis.model_dump(),
+        "diagnosis": dx,
         "retrieved_context": {"manual": manual, "safety": safety},
         "db_facts": db_facts,
         "prompt_versions": versions,

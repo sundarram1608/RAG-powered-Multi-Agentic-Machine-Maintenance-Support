@@ -27,13 +27,34 @@ Produce a Diagnosis:
 - root_cause: the most likely cause, grounded in the evidence.
 - evidence: short citations/snippets (manual/safety/DB) that support it.
 - fix_steps: ordered steps to resolve it.
-- needs_technician: true if the fix needs an on-site technician or a part
-  replacement; false if the operator can safely do it themselves.
+- needs_technician: operator-fixable (false) vs technician-required (true) — decide
+  using the criteria below.
 - parts_needed: spare parts required (by name), or empty.
 - safety_notes: precautions from the SAFETY passages RELEVANT to this fix (omit
   unrelated safety text).
 - retrieval_confidence: "high" / "medium" / "low" — how well the MANUAL passages
   actually address this symptom; use "low" if they don't cover it.
+
+Decide needs_technician using these criteria:
+- OPERATOR-FIXABLE (false) — routine, low-risk, no part replacement or
+  internal/electrical disassembly, AND safely doable by an operator using the
+  precautions in the SAFETY passages (e.g. letting parts cool, gloves):
+  re-running bed leveling / Z-offset, cleaning the nozzle tip or bed with IPA,
+  reloading or changing filament / clearing a runout, a cold-pull to clear a clog,
+  adjusting print or temperature settings, a firmware update.
+- TECHNICIAN-REQUIRED (true) — choose this if ANY of:
+  * a spare hardware PART must be installed (thermistor, heater cartridge,
+    hotend/nozzle assembly, fan, stepper, control board), or
+  * internal/electrical work, disassembly of the hotend/extruder/electronics, or
+    wiring repair (e.g. MINTEMP/MAXTEMP from broken thermistor wiring), or
+  * the SAFETY passages indicate a SERIOUS burn/electrical/mechanical hazard that
+    simple operator precautions cannot mitigate (needs trained handling or tools an
+    operator shouldn't use).
+- Tie-breakers: if parts_needed has a hardware spare (anything beyond a consumable
+  like filament), choose technician. If the fix is purely
+  settings/cleaning/calibration/reload AND any hazard is mitigated by the safety
+  precautions, choose operator. When genuinely unsure, or the hazard is serious,
+  default to technician (the safer choice).
 
 If the evidence is insufficient to diagnose confidently, say so via a low
 retrieval_confidence and a cautious root_cause rather than guessing.
