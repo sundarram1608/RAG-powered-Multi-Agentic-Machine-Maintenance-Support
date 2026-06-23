@@ -217,14 +217,14 @@ denied with MySQL error 1142.)
 - **Used by:** Action, Manage Incident (after `find_available_technician` / a chosen slot).
 - **Edge cases:** unknown/closed incident → reject; unknown employee → reject; slot already `Booked` → reject (availability enforced — no overload); supervisor (no calendar row) → a new `Booked` row is inserted; **reassign** auto-frees the prior assignee's slot (`reassigned_from`).
 
-### `update_incident(incident_id, technician_comments, close=True)`
+### `update_incident(incident_id, technician_comments, close=True, assignee_id=None)`
 
 - **Purpose:** record an incident's outcome and (by default) close it.
-- **What it does:** `UPDATE`s **only** `technician_comments` and (if `close`) `incident_closure_date`=`REFERENCE_TODAY`. Cannot touch any other column.
-- **Input:** `incident_id`, `technician_comments`, `close: bool = True`.
+- **What it does:** `UPDATE`s **only** `technician_comments`, (if `close`) `incident_closure_date`=`REFERENCE_TODAY`, and (if `assignee_id` given) `technician_id` — **no schedule booking**. Cannot touch any other column.
+- **Input:** `incident_id`, `technician_comments`, `close: bool = True`, `assignee_id: str = None`.
 - **Output:** `{ok: True, incident_id, status: "closed"|"open"}` · `{ok: False, error}`.
-- **Used by:** Action.
-- **Edge cases:** unknown incident → reject; closing an already-closed incident → reject; closing requires non-empty `technician_comments`.
+- **Used by:** Action, Manage Incident, **Self Action** (`assignee_id` = the operator, to record a self-resolved incident without booking a slot).
+- **Edge cases:** unknown incident → reject; closing an already-closed incident → reject; closing requires non-empty `technician_comments`; `assignee_id` is optional (default `None` → `technician_id` untouched, so existing callers are unaffected).
 
 ---
 

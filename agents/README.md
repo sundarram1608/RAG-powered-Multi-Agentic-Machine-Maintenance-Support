@@ -253,6 +253,17 @@ The plumbing every node stands on (no nodes yet):
 - **Edge cases:** hesitation/safety doubt → `technician` (safe default); genuinely unclear reply → re-ask; never reached when technician-required.
 - **Prompt:** `prompts/decider.py` · v1.0.0.
 
+### 10. Self Action Agent — `nodes/self_action.py`  ✅
+- **Purpose:** the operator self-fix path (Decider → `self`). Present the **verified** fix guidance, then — on the operator's choice — either log a **self-resolved incident** or hand off to Technician Action.
+- **LLM:** none (mechanical). **Tools:** `create_incident`, `update_incident`.
+- **Guidance (Option A — reuse):** shows `diagnosis.fix_steps` + `safety_notes` (already grounded + Verifier-approved) via `self_action_message()` — **no re-retrieval** (keeps it fast; content is trusted). Output renders the final confirmation.
+- **Two-choice interrupt:**
+  - **"Complete & close service request"** → `create_incident(reported_by=operator)` → `update_incident(close=True, assignee_id=operator, comment="Self-Action by the operator")` → `action_result = self_resolved`. The operator is recorded as reporter **and** resolver; **no schedule booking** (`work_date` NULL).
+  - **"Book a technician instead"** → **no write** → `action_result = escalate_to_technician` → routes to **Technician Action**.
+- **Input format** (state read): `diagnosis`, `machine_id`, `symptom`, `current_user_id`, `self_action_choice` (`"complete"`/`"technician"`, from the interrupt). **Output format:** `action_result` (dict).
+- **Edge cases:** `current_user_id` missing / `create_incident` validation fails → `action_result.action = "error"`; incident logged closed same-day; uses the `update_incident` `assignee_id` extension (operator as resolver, no booking).
+- **Prompt:** none (mechanical node).
+
 ## Graph assembly (Phase 4c)
 
 > `graph.py`: `StateGraph`, edges + conditional edges (clarification, verification

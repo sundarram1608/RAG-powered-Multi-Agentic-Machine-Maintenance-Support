@@ -65,9 +65,7 @@ AGENT_TOOLS = {
                             ],
                 "verifier": [],
                 "decider": [],
-                "self_action": [
-                                "user_manual_retrieval", "safety_retrieval", "create_incident", "update_incident",
-                            ],
+                "self_action": ["create_incident", "update_incident"],
                 "technician_action": [
                                         "find_available_technician", "create_incident", "book_technician_slot",
                                         "update_incident", "send_email",
