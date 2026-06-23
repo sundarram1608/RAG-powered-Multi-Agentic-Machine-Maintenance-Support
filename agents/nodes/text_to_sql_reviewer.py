@@ -19,7 +19,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # agents/ on path
 import config
-from llms import get_judge
+from llms import get_judge_structured
 from schemas import SqlReview
 from prompts.text_to_sql_reviewer import (
     TEXT_TO_SQL_REVIEWER_SYSTEM,
@@ -38,7 +38,7 @@ def text_to_sql_reviewer_node(state: dict) -> dict:
         schema=get_schema_context(), reference_today=config.REFERENCE_TODAY)
     human = f"User question: {question}\n\nProposed SQL:\n{plan['sql']}"
 
-    review = get_judge().with_structured_output(SqlReview).invoke(
+    review = get_judge_structured(SqlReview).invoke(
         [SystemMessage(content=system), HumanMessage(content=human)])
 
     versions = dict(state.get("prompt_versions", {}))

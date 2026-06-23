@@ -39,3 +39,21 @@ def get_judge():
         )
     return ChatGoogleGenerativeAI(model=config.JUDGE_MODEL, temperature=config.JUDGE_TEMPERATURE,
                                   max_retries=config.LLM_MAX_RETRIES)
+
+
+def get_judge_structured(schema):
+    """Independent judge bound to `schema`, with a Groq fallback.
+
+    Gemini stays the PRIMARY judge (independent non-Groq family). If it is
+    unavailable after retries — transient 503 demand spikes, or a hard daily-quota
+    429 that retries can't clear — LangChain `.with_fallbacks` transparently fails
+    over to Qwen-3 on Groq (also a different family than the Llama reasoner, so the
+    independence property is preserved). Returns a Runnable that yields `schema`.
+    """
+    primary = get_judge().with_structured_output(schema)
+    fallback = ChatGroq(
+        model=config.JUDGE_FALLBACK_MODEL,
+        temperature=config.JUDGE_TEMPERATURE,
+        max_retries=config.LLM_MAX_RETRIES,
+    ).with_structured_output(schema)
+    return primary.with_fallbacks([fallback])

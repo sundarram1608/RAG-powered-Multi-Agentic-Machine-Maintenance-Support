@@ -94,10 +94,19 @@ resume_turn(thread_id, value)           -> Result   # answer a clarification / a
 |---|---|---|
 | Reasoning | **Groq Llama 3.3 70B** | fast, strong tool-calling, free |
 | Verifier / future vision | **Gemini 2.5 Flash-Lite** | independent family; multimodal; free |
+| Judge fallback | **Qwen-3 32B (Groq)** | takes over when Gemini is unavailable; still a different family than the Llama reasoner |
 | Embeddings (RAG) | **BGE-M3 (local)** | free, no rate limits, deterministic |
 
 Switching providers is a one-line change in `llms.py`. Keys: `GROQ_API_KEY`,
 `GOOGLE_API_KEY` in `.env` (both free).
+
+**Resilience (free-tier reality).** Both models set `max_retries` (`config.LLM_MAX_RETRIES`)
+so the provider SDK rides out transient `503` (Groq over-capacity, Gemini "high
+demand") and transient `429`s with exponential backoff. The judge additionally uses
+`get_judge_structured()`, which keeps Gemini primary but **fails over to Qwen-3 on
+Groq** (`.with_fallbacks`) when Gemini is unavailable after retries — including a hard
+daily-quota `429` that retries can't clear. So a Gemini outage degrades the run, it
+doesn't break it.
 
 ---
 

@@ -20,6 +20,8 @@ load_dotenv(dotenv_path=ENV_PATH, override=True)
 # ── Models (free tiers; API-based, no local hosting) ──
 REASONING_MODEL = "llama-3.3-70b-versatile"   # Groq — reasoning / tool-calling
 JUDGE_MODEL = "gemini-2.5-flash-lite"         # Google — independent verifier (higher free RPD than 2.5-flash)
+JUDGE_FALLBACK_MODEL = "qwen/qwen3-32b"       # Groq — fallback judge when Gemini is unavailable
+                                              # (transient 503/quota); a different family than the Llama reasoner
 REASONING_TEMPERATURE = 0.0
 JUDGE_TEMPERATURE = 0.0
 # Provider SDK retries with exponential backoff — absorbs transient Groq 503

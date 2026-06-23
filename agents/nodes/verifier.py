@@ -21,7 +21,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # agents/ on path
 import config
-from llms import get_judge
+from llms import get_judge_structured
 from schemas import Verdict
 from prompts.verifier import VERIFIER_SYSTEM, VERIFIER_SYSTEM_VERSION
 
@@ -69,7 +69,7 @@ def verifier_node(state: dict) -> dict:
         state.get("db_facts", {}),
         state.get("diagnosis", {}),
     )
-    verdict = get_judge().with_structured_output(Verdict).invoke([
+    verdict = get_judge_structured(Verdict).invoke([
         SystemMessage(content=VERIFIER_SYSTEM),
         HumanMessage(content=human),
     ])
