@@ -332,58 +332,51 @@ The 4 interrupting agents (`intake`, `decider`, `self_action`, `manage_resolve`)
 are registered as thin **interrupt wrappers** around the plain, standalone-tested
 node functions — the wrappers add `interrupt()`; the agents' logic is unchanged.
 
-### 2. Topology (the generated diagram)
-Compiled graph — **16 nodes** (14 + start/end), **27 edges**. Solid = unconditional,
-dotted = conditional. Regenerate with `python agents/graph.py`.
+### 2. Topology
+Compiled graph — **16 nodes** (14 agents + start/end), **27 edges**. Conditional
+edges are labelled with their routing condition; unlabelled edges are
+unconditional. The four amber nodes pause for the user (LangGraph `interrupt()`).
+Regenerate the raw export any time with `python agents/graph.py`.
 
 ```mermaid
-graph TD;
-	__start__([__start__]):::first
-	input(input)
-	supervisor(supervisor)
-	analytics_generate(analytics_generate)
-	text_to_sql_reviewer(text_to_sql_reviewer)
-	analytics_execute(analytics_execute)
-	manage_resolve(manage_resolve)
-	manage_execute(manage_execute)
-	intake(intake)
-	diagnosis(diagnosis)
-	verifier(verifier)
-	decider(decider)
-	self_action(self_action)
-	technician_action(technician_action)
-	output(output)
-	__end__([__end__]):::last
-	__start__ --> input;
-	input -.-> output;
-	input -.-> supervisor;
-	supervisor -.-> analytics_generate;
-	supervisor -.-> intake;
-	supervisor -.-> manage_resolve;
-	supervisor -.-> output;
-	analytics_generate --> text_to_sql_reviewer;
-	text_to_sql_reviewer -.-> analytics_execute;
-	text_to_sql_reviewer -.-> analytics_generate;
-	text_to_sql_reviewer -.-> output;
-	analytics_execute -.-> analytics_generate;
-	analytics_execute -.-> output;
-	manage_resolve -.-> manage_execute;
-	manage_resolve -.-> output;
-	manage_execute --> output;
-	intake --> diagnosis;
-	diagnosis --> verifier;
-	verifier -.-> decider;
-	verifier -.-> diagnosis;
-	verifier -.-> technician_action;
-	decider -.-> self_action;
-	decider -.-> technician_action;
-	self_action -.-> output;
-	self_action -.-> technician_action;
-	technician_action --> output;
-	output --> __end__;
-	classDef default fill:#f2f0ff,line-height:1.2
-	classDef first fill-opacity:0
-	classDef last fill:#bfb6fc
+flowchart TD
+    START([start]) --> input[input guard]
+    input -->|unsafe| output[output]
+    input -->|safe| supervisor{supervisor}
+
+    supervisor -->|general| output
+    supervisor -->|analytics| analytics_generate[analytics_generate]
+    supervisor -->|manage_incident| manage_resolve[manage_resolve]
+    supervisor -->|troubleshoot| intake[intake]
+
+    analytics_generate --> text_to_sql_reviewer[text_to_sql_reviewer]
+    text_to_sql_reviewer -->|approved| analytics_execute[analytics_execute]
+    text_to_sql_reviewer -->|reject, retry| analytics_generate
+    text_to_sql_reviewer -->|exhausted| output
+    analytics_execute -->|ok| output
+    analytics_execute -->|db error, retry| analytics_generate
+
+    manage_resolve -->|unsupported / cancelled| output
+    manage_resolve -->|approved| manage_execute[manage_execute]
+    manage_execute --> output
+
+    intake --> diagnosis[diagnosis]
+    diagnosis --> verifier[verifier]
+    verifier -->|approved, needs technician| technician_action[technician_action]
+    verifier -->|approved, operator-fixable| decider[decider]
+    verifier -->|reject, retry| diagnosis
+    verifier -->|exhausted| technician_action
+
+    decider -->|self| self_action[self_action]
+    decider -->|technician| technician_action
+    self_action -->|complete| output
+    self_action -->|book technician| technician_action
+
+    technician_action --> output
+    output --> DONE([end])
+
+    classDef interrupt fill:#FAEEDA,stroke:#BA7517,color:#412402;
+    class intake,decider,self_action,manage_resolve interrupt;
 ```
 
 Four sub-flows hang off the supervisor's 4-way route, and **everything converges
