@@ -275,8 +275,20 @@ The plumbing every node stands on (no nodes yet):
 
 ### 12. Output Agent — `nodes/output.py`  ✅
 - **Purpose:** the single voice — compose the **final user-facing reply** for every terminal path, then a final **PII scrub**.
-- **Grounding (Option A):** fact-heavy paths are rendered by **templates** in the node (ids/names/dates/counts verbatim from state — cannot be hallucinated); the **LLM** is used ONLY for `general` (capability/greeting) and `analytics` (summarize rows, **exact number quoting**). LLM: Groq Llama 3.3 70B. **Tools:** none.
-- **Paths:** refusal (relay `guard_reason`) · general (LLM) · analytics (LLM + exact quote) · troubleshoot/self (numbered steps + safety + "logged & closed as inc_X") · troubleshoot/technician ("logged inc_X; {role} {emp} for {date/slot}; you'll be notified"; notes escalation; **verifier-exhaustion** adds "a technician needs to assess on site") · no_assignee · manage_incident confirmation.
+- **Grounding (Option A):** fact-heavy paths are rendered by **templates** in the node (ids/names/dates/counts verbatim from state — cannot be hallucinated); the **LLM** is used ONLY for `general` and `analytics`. LLM: Groq Llama 3.3 70B. **Tools:** none.
+- **Per-path rendering** (what produces each reply, and where):
+
+  | Path | Rendered by | Where |
+  |---|---|---|
+  | general | **LLM** | `OUTPUT_SYSTEM` (MODE = general) |
+  | analytics | **LLM** (exact number quoting) | `OUTPUT_SYSTEM` (MODE = analytics) |
+  | refusal | template | `output_node` → relays `guard_reason` |
+  | troubleshoot / self | template | `output_node._self_resolved()` (numbered steps + safety + "logged & closed as inc_X") |
+  | troubleshoot / technician | template | `output_node._technician()` ("logged inc_X; {role} {emp} for {date/slot}…"; notes escalation; verifier-exhaustion adds "a technician needs to assess on site") |
+  | no_assignee | template | `output_node` (inline) |
+  | manage_incident | template | `output_node._manage()` |
+
+  > Note: `OUTPUT_SYSTEM` (`prompts/output.py`) deliberately covers **only** the two LLM modes (general + analytics) — under Option A the templated paths above are produced in code, not by the prompt.
 - **Input format** (state read): `intent`, `input_safe`, `guard_reason`, `user_input`, `diagnosis`, `action_result`, `manage_plan`, `sql_result`, `verifier_exhausted`. **Output format:** `final_response` (str, PII-scrubbed); tags `prompt_versions["output"]`.
 - **PII scrub:** regex strips any email / 7+-digit phone from the final text (belt-and-suspenders; tools already keep PII out of state).
 - **Verifier exhaustion:** routed to Technician Action (auto-dispatch); Output states a technician will assess it (no apologetic caveat).
