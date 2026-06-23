@@ -62,8 +62,10 @@ class Verdict(BaseModel):
 
 
 class Decision(BaseModel):
-    """Decider Agent — the user's choice on who fixes it."""
-    path: Literal["self", "technician"] = Field(description="self = the operator will fix it themselves (Self Action); technician = dispatch a technician (Technician Action).")
+    """Decider Agent — interpret the operator's self-vs-technician choice."""
+    path: Optional[Literal["self", "technician"]] = Field(default=None, description="self = the operator fixes it with guidance (Self Action); technician = dispatch a technician (Technician Action); null if the reply is unclear.")
+    needs_clarification: bool = Field(default=False, description="True if the reply doesn't clearly indicate a choice.")
+    question: Optional[str] = Field(default=None, description="A short re-ask when needs_clarification is True.")
 
 
 class SqlPlan(BaseModel):

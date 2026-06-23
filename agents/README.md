@@ -244,6 +244,15 @@ The plumbing every node stands on (no nodes yet):
 - **Edge cases:** ungrounded/irrelevant claim → reject with actionable issues; off-topic retrieval → `context_relevant=False`; fix contradicts safety → `safe=False`; strict default (not-approved when unsure).
 - **Prompt:** `prompts/verifier.py` · v1.0.0.
 
+### 9. Decider Agent — `nodes/decider.py`  ✅
+- **Purpose:** decide who fixes it. **Reached ONLY when the diagnosis is operator-fixable** (`needs_technician == False`) — when technician-required, the graph routes straight to **Technician Action** with no question. For operator-fixable, it asks the operator: guided self-fix or assign a technician?
+- **LLM:** **Groq Llama 3.3 70B** (interpret the reply). **Tools:** none.
+- **Flow:** the graph asks via `interrupt()` using `decider_question(diagnosis)` ("This looks like something you can safely fix yourself: …; do it yourself, or assign a technician?"); `decider_node` then interprets the reply.
+- **Input format** (state read): `user_input` (the reply); `diagnosis` (for the ask). **Output format** (Pydantic `Decision` via `with_structured_output`) → state: `decision_path` (`"self"`/`"technician"`), `needs_clarification`, `clarification_question`; tags `prompt_versions["decider"]`.
+- **Routing:** `self` → **Self Action**; `technician` → **Technician Action**.
+- **Edge cases:** hesitation/safety doubt → `technician` (safe default); genuinely unclear reply → re-ask; never reached when technician-required.
+- **Prompt:** `prompts/decider.py` · v1.0.0.
+
 ## Graph assembly (Phase 4c)
 
 > `graph.py`: `StateGraph`, edges + conditional edges (clarification, verification
