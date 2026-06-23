@@ -273,6 +273,16 @@ The plumbing every node stands on (no nodes yet):
 - **Edge cases:** no technician in 3 days → supervisor escalation; no active staff at all → `no_assignee`; `create_incident` fails → `error`.
 - **Prompt:** none (mechanical node).
 
+### 12. Output Agent — `nodes/output.py`  ✅
+- **Purpose:** the single voice — compose the **final user-facing reply** for every terminal path, then a final **PII scrub**.
+- **Grounding (Option A):** fact-heavy paths are rendered by **templates** in the node (ids/names/dates/counts verbatim from state — cannot be hallucinated); the **LLM** is used ONLY for `general` (capability/greeting) and `analytics` (summarize rows, **exact number quoting**). LLM: Groq Llama 3.3 70B. **Tools:** none.
+- **Paths:** refusal (relay `guard_reason`) · general (LLM) · analytics (LLM + exact quote) · troubleshoot/self (numbered steps + safety + "logged & closed as inc_X") · troubleshoot/technician ("logged inc_X; {role} {emp} for {date/slot}; you'll be notified"; notes escalation; **verifier-exhaustion** adds "a technician needs to assess on site") · no_assignee · manage_incident confirmation.
+- **Input format** (state read): `intent`, `input_safe`, `guard_reason`, `user_input`, `diagnosis`, `action_result`, `manage_plan`, `sql_result`, `verifier_exhausted`. **Output format:** `final_response` (str, PII-scrubbed); tags `prompt_versions["output"]`.
+- **PII scrub:** regex strips any email / 7+-digit phone from the final text (belt-and-suspenders; tools already keep PII out of state).
+- **Verifier exhaustion:** routed to Technician Action (auto-dispatch); Output states a technician will assess it (no apologetic caveat).
+- **Edge cases:** empty analytics result → "no matching records"; `error` action → generic apology. Systematic faithfulness eval deferred to Phase 5.
+- **Prompt:** `prompts/output.py` · v1.0.0 (covers the general + analytics LLM modes).
+
 ## Graph assembly (Phase 4c)
 
 > `graph.py`: `StateGraph`, edges + conditional edges (clarification, verification
