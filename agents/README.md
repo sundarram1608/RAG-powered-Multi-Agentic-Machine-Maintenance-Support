@@ -243,7 +243,15 @@ The plumbing every node stands on (no nodes yet):
 - **Prompt:** `prompts/diagnosis.py` · v1.0.0.
 
 ### 8. Verifier Agent — `nodes/verifier.py`  ✅
-- **Purpose:** independent **LLM-as-judge** over the Diagnosis, using the **RAG triad + safety** across two relationships: *context↔query* and *diagnosis↔context/query*.
+- **Purpose:** independent **LLM-as-judge** over the Diagnosis, using the **RAG triad(context relevance, groundedness, answer relevance)) + safety** across two relationships: *context↔query* and *diagnosis↔context/query*.
+
+| Description | Standard name | What it checks |
+|--------------|---------------|----------------|
+| context is relevant/safe w.r.t. the query | Context Relevance | Did retrieval fetch passages that actually pertain to the symptom? (catches retrieval misses) |
+| diagnosis is grounded w.r.t. the context | Groundedness / Faithfulness | Is every claim in the diagnosis supported by the evidence? (catches hallucination) |
+| diagnosis is relevant w.r.t. the query | Answer Relevance | Does the diagnosis address the user's actual symptom? |
+| both are safe | Safety | Do the fix steps respect the safety passages? |
+
 - **LLM:** **Gemini 2.5 Flash-Lite** (a different model family than the Llama diagnoser → independent judgment, fewer correlated blind spots).
 - **Tools:** none (judges the evidence already in state).
 - **Input format** (state read): `symptom`, `retrieved_context` (manual+safety), `db_facts`, `diagnosis`.
