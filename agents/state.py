@@ -41,13 +41,16 @@ class State(TypedDict, total=False):
     # --- verification ---
     verdict: Optional[dict]
     verify_attempts: int
+    verifier_exhausted: bool                   # set when the last verify attempt still failed
 
     # --- decision & action ---
     decision_path: Optional[str]               # "self" | "technician"
+    self_action_choice: Optional[str]          # "complete" | "technician" (set at the interrupt)
     manage_plan: Optional[dict]                # Manage Incident plan (+ enrichment)
     requires_approval: bool
     approval: Optional[str]                    # "approved" | "rejected"
     email_dry_run: bool                        # if True, send_email composes but doesn't send
+    booking_moment: Optional[str]              # optional override for the booking "now" (tests)
     action_result: Optional[dict]
 
     # --- analytics (text-to-SQL coder <-> reviewer loop) ---
@@ -55,7 +58,6 @@ class State(TypedDict, total=False):
     sql_review: Optional[dict]                 # SqlReview (reviewer verdict)
     sql_result: Optional[dict]                 # run_readonly_query result
     analytics_attempts: int                    # coder<->reviewer / DB-error retries
-    sql_answer: Optional[dict]                 # final answer (rendered by Output)
 
     # --- output ---
     final_response: Optional[str]

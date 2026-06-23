@@ -38,7 +38,7 @@ _SCRATCH_RESET = {
     "verdict": None, "verify_attempts": 0, "verifier_exhausted": False,
     "decision_path": None, "manage_plan": None, "action_result": None,
     "sql_plan": None, "sql_review": None, "sql_result": None,
-    "analytics_attempts": 0, "sql_answer": None, "final_response": None,
+    "analytics_attempts": 0, "final_response": None,
 }
 
 

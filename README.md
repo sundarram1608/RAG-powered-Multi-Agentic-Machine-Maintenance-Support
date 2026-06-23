@@ -177,7 +177,10 @@ python agents/test_routing.py
 Full guide (topology, every edge, interrupts, turn/memory model) → [`agents/README.md`](agents/README.md)
 
 ### 5. Observability + app — *(coming soon)*
-LangSmith tracing + RAG eval (Phase 5), then a Streamlit UI (Phase 6).
+LangSmith tracing + RAG eval (Phase 5), then the Streamlit UI (Phase 6). A UI
+**skeleton** already exists in [`app/`](app/) (`main.py` + `app_utils.py`) — the
+chat shell is wired, but `run_agent()` is still a stub; Phase 6 connects it to
+`agents/api.py` (`start_turn`/`resume_turn`).
 
 ---
 

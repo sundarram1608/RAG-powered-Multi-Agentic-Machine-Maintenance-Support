@@ -143,7 +143,7 @@ The plumbing every node stands on (no nodes yet):
 | File | Purpose |
 |---|---|
 | [`config.py`](config.py) | models, MCP server map, **per-agent tool allow-lists**, workflow constants, API keys |
-| [`schemas.py`](schemas.py) | Pydantic structured outputs (`GuardResult`, `Route`, `Intake`, `Diagnosis`, `Verdict`, `Decision`, `SqlAnswer`) |
+| [`schemas.py`](schemas.py) | Pydantic structured outputs (`GuardResult`, `Route`, `Intake`, `Diagnosis`, `Verdict`, `Decision`, `SqlPlan`, `SqlReview`, `ManagePlan`) |
 | [`llms.py`](llms.py) | `get_reasoner()` (Groq) · `get_judge()` (Gemini) — provider factory |
 | [`mcp_client.py`](mcp_client.py) | connect to both MCP servers; `get_all_tools()` + `tools_for(agent)` |
 

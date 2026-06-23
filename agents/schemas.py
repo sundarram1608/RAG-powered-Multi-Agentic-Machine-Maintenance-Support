@@ -84,11 +84,6 @@ class SqlReview(BaseModel):
     issues: List[str] = Field(default_factory=list, description="Specific, actionable problems for the coder to fix; empty if approved.")
 
 
-class SqlAnswer(BaseModel):
-    """Output Agent (analytics path) — natural-language answer from the query rows."""
-    answer: str = Field(description="Plain-language answer to the analytics question, derived from the query result rows.")
-
-
 class ManagePlan(BaseModel):
     """Manage Incident Agent (resolve) — the planned action on a known incident."""
     incident_id: Optional[str] = Field(default=None, description="The incident to act on, e.g. 'inc_26'.")
