@@ -277,7 +277,7 @@ and rebuilds the index from scratch.
 The retrieval side of RAG — what the agent calls at query time. Two single-purpose
 functions, each embeds the query with the **same BGE-M3 model**, runs a
 metadata-filtered cosine search over the persisted Chroma index to fetch a wider
-**candidate set** (`RERANK_CANDIDATES = 20`), then **reranks** those candidates with
+**candidate set** (`RERANK_CANDIDATES = 8`), then **reranks** those candidates with
 the `bge-reranker-v2-m3` cross-encoder (`reranker_loader.py`) and keeps the top-k:
 
 - **`user_manual_retrieval(query, mvc_code, k=5)`** → top-k **manual** chunks for that

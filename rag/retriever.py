@@ -32,7 +32,8 @@ from vectorstore import get_chroma_collection
 
 MANUAL_K = 5
 SAFETY_K = 2
-RERANK_CANDIDATES = 20   # wider set fetched by dense search, before reranking
+RERANK_CANDIDATES = 8    # wider set fetched by dense search, before reranking
+                         # (8 keeps CPU reranking fast; Phase-5 eval tunes this)
 
 
 @lru_cache(maxsize=1)
