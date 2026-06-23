@@ -19,9 +19,13 @@ load_dotenv(dotenv_path=ENV_PATH, override=True)
 
 # ── Models (free tiers; API-based, no local hosting) ──
 REASONING_MODEL = "llama-3.3-70b-versatile"   # Groq — reasoning / tool-calling
-JUDGE_MODEL = "gemini-2.5-flash"              # Google — independent verifier (+ future vision)
+JUDGE_MODEL = "gemini-2.5-flash-lite"         # Google — independent verifier (higher free RPD than 2.5-flash)
 REASONING_TEMPERATURE = 0.0
 JUDGE_TEMPERATURE = 0.0
+# Provider SDK retries with exponential backoff — absorbs transient Groq 503
+# (over-capacity) and transient Gemini 429s. (A hard daily-quota 429 is not
+# retried away — it needs a higher-quota model/tier.)
+LLM_MAX_RETRIES = 5
 
 # Dataset reference "today" — must match the data layer's REFERENCE_TODAY
 # (seeded data is anchored to June 2026; the real date.today() is not used).

@@ -8,7 +8,7 @@ passages + db_facts) and the user's SYMPTOM, and judges two relationships:
 No tools — it judges the evidence already in state. On failure the graph loops back
 to Diagnosis with the issues (capped at VERIFY_MAX_ATTEMPTS).
 
-LLM: Gemini 2.5 Flash (independent — a different model family than the diagnoser).
+LLM: Gemini 2.5 Flash-Lite (independent — a different model family than the diagnoser).
 Prompt: prompts/verifier.py (VERIFIER_SYSTEM, versioned).
 Input  (reads state): symptom, retrieved_context, db_facts, diagnosis.
 Output (writes state): verdict (Verdict dict), verify_attempts (incremented),

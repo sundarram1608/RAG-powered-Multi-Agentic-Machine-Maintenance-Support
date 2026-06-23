@@ -3,7 +3,7 @@ llms.py — LLM provider factory for the agent layer.
 
   get_reasoner() -> Groq Llama 3.3 70B   (reasoning / tool-calling: supervisor,
                     intake, diagnosis, deciders, actions, analytics, output)
-  get_judge()    -> Gemini 2.5 Flash      (independent verifier / future vision)
+  get_judge()    -> Gemini 2.5 Flash-Lite (independent verifier / future vision)
 
 Both read their API keys from .env (loaded by config). Switching providers is a
 one-line change here — every node calls these factories, not a provider directly.
@@ -26,14 +26,16 @@ def get_reasoner():
             "GROQ_API_KEY is not set in .env — required for the reasoning model. "
             "Get a free key at https://console.groq.com → API Keys."
         )
-    return ChatGroq(model=config.REASONING_MODEL, temperature=config.REASONING_TEMPERATURE)
+    return ChatGroq(model=config.REASONING_MODEL, temperature=config.REASONING_TEMPERATURE,
+                    max_retries=config.LLM_MAX_RETRIES)
 
 
 def get_judge():
-    """Gemini 2.5 Flash — the independent verifier (a different model family)."""
+    """Gemini 2.5 Flash-Lite — the independent verifier (a different model family)."""
     if not config.GOOGLE_API_KEY:
         raise RuntimeError(
             "GOOGLE_API_KEY is not set in .env — required for the judge model. "
             "Get a free key at https://aistudio.google.com → Get API key."
         )
-    return ChatGoogleGenerativeAI(model=config.JUDGE_MODEL, temperature=config.JUDGE_TEMPERATURE)
+    return ChatGoogleGenerativeAI(model=config.JUDGE_MODEL, temperature=config.JUDGE_TEMPERATURE,
+                                  max_retries=config.LLM_MAX_RETRIES)

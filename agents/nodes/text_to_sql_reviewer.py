@@ -7,7 +7,7 @@ A semantic check that complements run_readonly_query's mechanical validation and
 the read-only DB user (defense in depth). On reject, the graph loops back to the
 Analytics coder with the issues (capped at ANALYTICS_MAX_ATTEMPTS).
 
-LLM: Gemini 2.5 Flash (independent judge — a different model family than the coder).
+LLM: Gemini 2.5 Flash-Lite (independent judge — a different model family than the coder).
 Prompt: prompts/text_to_sql_reviewer.py (versioned).
 Input  (reads state): user_input, sql_plan.
 Output (writes state): sql_review (SqlReview dict), prompt_versions["text_to_sql_reviewer"].

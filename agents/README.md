@@ -93,7 +93,7 @@ resume_turn(thread_id, value)           -> Result   # answer a clarification / a
 | Role | Model | Why |
 |---|---|---|
 | Reasoning | **Groq Llama 3.3 70B** | fast, strong tool-calling, free |
-| Verifier / future vision | **Gemini 2.5 Flash** | independent family; multimodal; free |
+| Verifier / future vision | **Gemini 2.5 Flash-Lite** | independent family; multimodal; free |
 | Embeddings (RAG) | **BGE-M3 (local)** | free, no rate limits, deterministic |
 
 Switching providers is a one-line change in `llms.py`. Keys: `GROQ_API_KEY`,
@@ -192,7 +192,7 @@ The plumbing every node stands on (no nodes yet):
 
 ### 4. Text-to-SQL Reviewer — `nodes/text_to_sql_reviewer.py`  ✅
 - **Purpose:** judge the generated SQL **before** it runs — the *semantic* layer of a 3-layer defense (reviewer = grounded/relevant/safe; `validate_select_sql` = mechanical; `maint_readonly` = DB enforcement).
-- **LLM:** **Gemini 2.5 Flash** (independent judge — different model family than the Llama coder).
+- **LLM:** **Gemini 2.5 Flash-Lite** (independent judge — different model family than the Llama coder).
 - **Tools:** none.
 - **Input format** (state read): `user_input`, `sql_plan`.
 - **Output format** (Pydantic `SqlReview` via `with_structured_output`) → state `sql_review` (`grounded`, `relevant`, `safe`, `approved`, `issues`); tags `prompt_versions["text_to_sql_reviewer"]`.
@@ -235,7 +235,7 @@ The plumbing every node stands on (no nodes yet):
 
 ### 8. Verifier Agent — `nodes/verifier.py`  ✅
 - **Purpose:** independent **LLM-as-judge** over the Diagnosis, using the **RAG triad + safety** across two relationships: *context↔query* and *diagnosis↔context/query*.
-- **LLM:** **Gemini 2.5 Flash** (a different model family than the Llama diagnoser → independent judgment, fewer correlated blind spots).
+- **LLM:** **Gemini 2.5 Flash-Lite** (a different model family than the Llama diagnoser → independent judgment, fewer correlated blind spots).
 - **Tools:** none (judges the evidence already in state).
 - **Input format** (state read): `symptom`, `retrieved_context` (manual+safety), `db_facts`, `diagnosis`.
 - **Output format** (Pydantic `Verdict` via `with_structured_output`) → state: `verdict` (`context_relevant`, `grounded`, `answer_relevant`, `safe`, `approved`, `score`, `issues`), increments `verify_attempts`; tags `prompt_versions["verifier"]`.
