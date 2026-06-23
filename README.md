@@ -3,7 +3,7 @@
 A multi-agent AI workflow for **manufacturing equipment troubleshooting, maintenance and service**, built with
 LangGraph (orchestration), RAG over a vector database (knowledge), and MCP (tools/actions).
 
-> Status: 🚧 Agents Loading.....
+> Status: ✅ Multi-agent workflow assembled (12 agents, LangGraph) — observability (LangSmith) + UI next.
 
 ---
 ## Building the Project from Scratch
@@ -142,9 +142,42 @@ Full guide → [`mcp_server/README.md`](mcp_server/README.md)
 
 ---
 
-### 4. Agents / app — *(coming soon)*
+### 4. Agent layer — LangGraph workflow
 
+**12 specialized agents** are wired into one **LangGraph `StateGraph`** (14 nodes),
+compiled with a `MemorySaver` checkpointer. The Input guard screens every turn; the
+**Supervisor** routes to one of four sub-flows:
 
+- **troubleshoot** — Intake (resolve machine + symptom) → Diagnosis (RAG manual/safety + DB facts, corrective-RAG) → Verifier (independent RAG-triad + safety judge) → the `needs_technician` gate → **Self Action** (operator self-fix) / **Technician Action** (book + notify) / Decider.
+- **analytics** — text-to-SQL Generator → independent Reviewer → execute (read-only) → answer.
+- **manage_incident** — resolve → approve → execute (close / assign / comment).
+- **general** — a capability/greeting reply.
+
+Everything converges on a single **Output** agent (the "voice"), which renders
+fact-bearing replies from templates (no hallucinated ids/counts) and a final PII
+scrub. **Human-in-the-loop** pauses (clarifications, the self/technician decision,
+the two-button self-fix, manage approval) use LangGraph `interrupt()` / resume.
+
+**Models (all free-tier):** Groq **Llama 3.3 70B** (reasoning / tool-calling),
+**Gemini 2.5 Flash-Lite** (independent judge) with a **Qwen-3 32B on Groq** fallback
+when Gemini is unavailable, **BGE-M3** (local embeddings) + reranker. Both LLMs use
+retry/backoff. Needs `GROQ_API_KEY` + `GOOGLE_API_KEY` in `.env`.
+
+```bash
+# start the HTTP services server first (separate terminal)
+python mcp_server/server.py http
+
+# interactive CLI (one process = one conversation)
+python agents/run.py
+
+# or the end-to-end journeys / deterministic routing checks
+python agents/test_e2e.py
+python agents/test_routing.py
+```
+Full guide (topology, every edge, interrupts, turn/memory model) → [`agents/README.md`](agents/README.md)
+
+### 5. Observability + app — *(coming soon)*
+LangSmith tracing + RAG eval (Phase 5), then a Streamlit UI (Phase 6).
 
 ---
 
