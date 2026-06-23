@@ -297,10 +297,169 @@ The plumbing every node stands on (no nodes yet):
 
 ## Graph assembly (Phase 4c)
 
-> `graph.py`: `StateGraph`, edges + conditional edges (clarification, verification
-> retry, approval), checkpointer, `compile()`. The generated graph diagram will be
-> embedded at the top of this README. *(to be added.)*
+`graph.py` wires the 12 agents into one LangGraph `StateGraph`, compiled with a
+`MemorySaver` checkpointer. `api.py` is the thin boundary the app calls; `run.py`
+is a CLI driver. The shared scratchpad is `state.State` (a TypedDict); each node
+returns a partial update that LangGraph merges.
+
+### 1. Node inventory (12 agents → 14 graph nodes)
+A few agents are multi-step, so the graph has slightly more nodes than agents:
+
+| Graph node | From agent |
+|---|---|
+| `input` | Input |
+| `supervisor` | Supervisor |
+| `analytics_generate` · `text_to_sql_reviewer` · `analytics_execute` | Analytics (+ Reviewer) |
+| `manage_resolve` · `manage_execute` | Manage Incident |
+| `intake` | Intake |
+| `diagnosis` | Diagnosis |
+| `verifier` | Verifier |
+| `decider` | Decider |
+| `self_action` | Self Action |
+| `technician_action` | Technician Action |
+| `output` | Output |
+
+The 4 interrupting agents (`intake`, `decider`, `self_action`, `manage_resolve`)
+are registered as thin **interrupt wrappers** around the plain, standalone-tested
+node functions — the wrappers add `interrupt()`; the agents' logic is unchanged.
+
+### 2. Topology (the generated diagram)
+Compiled graph — **16 nodes** (14 + start/end), **27 edges**. Solid = unconditional,
+dotted = conditional. Regenerate with `python agents/graph.py`.
+
+```mermaid
+graph TD;
+	__start__([__start__]):::first
+	input(input)
+	supervisor(supervisor)
+	analytics_generate(analytics_generate)
+	text_to_sql_reviewer(text_to_sql_reviewer)
+	analytics_execute(analytics_execute)
+	manage_resolve(manage_resolve)
+	manage_execute(manage_execute)
+	intake(intake)
+	diagnosis(diagnosis)
+	verifier(verifier)
+	decider(decider)
+	self_action(self_action)
+	technician_action(technician_action)
+	output(output)
+	__end__([__end__]):::last
+	__start__ --> input;
+	input -.-> output;
+	input -.-> supervisor;
+	supervisor -.-> analytics_generate;
+	supervisor -.-> intake;
+	supervisor -.-> manage_resolve;
+	supervisor -.-> output;
+	analytics_generate --> text_to_sql_reviewer;
+	text_to_sql_reviewer -.-> analytics_execute;
+	text_to_sql_reviewer -.-> analytics_generate;
+	text_to_sql_reviewer -.-> output;
+	analytics_execute -.-> analytics_generate;
+	analytics_execute -.-> output;
+	manage_resolve -.-> manage_execute;
+	manage_resolve -.-> output;
+	manage_execute --> output;
+	intake --> diagnosis;
+	diagnosis --> verifier;
+	verifier -.-> decider;
+	verifier -.-> diagnosis;
+	verifier -.-> technician_action;
+	decider -.-> self_action;
+	decider -.-> technician_action;
+	self_action -.-> output;
+	self_action -.-> technician_action;
+	technician_action --> output;
+	output --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
+```
+
+Four sub-flows hang off the supervisor's 4-way route, and **everything converges
+at `output → END`**:
+- **general** → `output` (LLM writes a capability/greeting reply).
+- **analytics** → `analytics_generate → text_to_sql_reviewer → analytics_execute → output`, with two loops back to `analytics_generate` (reviewer-reject, db-error).
+- **manage_incident** → `manage_resolve` (interrupts for clarify / choose-technician / approve) → `manage_execute → output`.
+- **troubleshoot** → `intake` (interrupts to clarify machine/symptom) → `diagnosis → verifier`, then the `needs_technician` gate → `decider` / `technician_action`, and `self_action` (interrupts for the 2 buttons).
+
+### 3. Conditional-edge functions (the routers)
+Each is a pure `state → next_node_name`:
+
+| Router | Decision |
+|---|---|
+| `route_after_input` | `output` if `input_safe is False` else `supervisor` |
+| `route_after_supervisor` | `intent` → `intake` / `analytics_generate` / `manage_resolve` / `output` |
+| `route_after_reviewer` | `analytics_execute` if approved · `analytics_generate` if `attempts<3` · else `output` |
+| `route_after_analytics_execute` | `output` if `sql_result.ok` · `analytics_generate` if `attempts<3` · else `output` |
+| `route_after_manage_resolve` | `output` if action ∈ {unsupported, cancelled} else `manage_execute` |
+| `route_after_verifier` | approved → (`technician_action` if `needs_technician` else `decider`); reject & `attempts<3` → `diagnosis`; else → `technician_action` |
+| `route_after_decider` | `self_action` if `decision_path=="self"` else `technician_action` |
+| `route_after_self_action` | `technician_action` if `escalate_to_technician` else `output` |
+
+**Loops & caps:** analytics coder↔reviewer↔execute (`ANALYTICS_MAX_ATTEMPTS=3`),
+diagnosis↔verifier (`VERIFY_MAX_ATTEMPTS=3`), diagnosis-internal corrective-RAG
+(`MAX_DIAGNOSIS_REQUERIES=3`). `recursion_limit=50` sits well above the worst path.
+On verify exhaustion the verifier sets `verifier_exhausted=True` and routing
+auto-dispatches a technician (Output says a technician will assess it — no caveat).
+
+### 4. Interrupts (human-in-the-loop) — LangGraph `interrupt()`
+The 4 interrupting nodes call `interrupt(payload)` **inside** the node: it pauses
+the graph mid-node and surfaces `payload`; the caller resumes with
+`Command(resume=value)`, and `interrupt()` returns that value — **without re-running
+any upstream node** (unlike an end-and-restart, which would re-run the supervisor on
+every clarification and risk re-routing). The other 8 nodes never pause.
+
+| Node | Interrupt payload (`type`) | Resume value |
+|---|---|---|
+| `intake` | `clarify` — which machine / what symptom | the user's reply (loops until resolved, cap 4) |
+| `decider` | `decision` — fix it yourself or book a technician? | free text → interpreted to `self` / `technician` |
+| `self_action` | `choice` — guidance + 2 buttons | `"complete"` (log self-resolved) / `"technician"` (escalate) |
+| `manage_resolve` | `clarify` / `approve` | the reply, or `"approve"`/`"reject"` (reject → cancelled → output) |
+
+### 5. Turn & memory model
+- **`thread_id` = one conversation.** `MemorySaver` isolates state per thread (dev; swap to `SqliteSaver` for persistence in Phase 6).
+- **Within a request,** interrupts pause/resume on the *same* thread — no upstream re-runs.
+- **A new request** re-enters at `input`, which **resets the per-request scratch** (`machine_id, symptom, diagnosis, verdict, action_result, sql_*, manage_plan, decision_path, *_attempts, verifier_exhausted`) while keeping `messages` + `current_user_id`. So a new request never inherits a stale diagnosis. *(Resumes bypass `input`, so they don't reset.)*
+
+### 6. Node adaptations made in 4c
+- `mcp_client.get_all_tools()` — **caches** the tool list (one fetch, reused across nodes; the tools open their own per-call sessions).
+- `input` — resets per-request scratch (above).
+- `verifier` — sets `verifier_exhausted` when the last attempt still fails.
+- `diagnosis` — on a verify-driven retry, folds `verdict.issues` into the synthesis prompt so the loop self-corrects.
+- `output` — renders a `cancelled` manage action ("no changes were made").
+
+### 7. Async note
+Sync nodes (`input`, `supervisor`, `text_to_sql_reviewer`, `verifier`, `decider`,
+`output`) and **async** nodes (anything that calls MCP tools: `analytics_*`,
+`manage_*`, `intake`, `diagnosis`, `technician_action`, `self_action`) coexist in
+one graph; it is driven with `ainvoke`.
+
+### 8. App connection (`api.py`)
+```python
+start_turn(thread_id, user_id, message)  # a NEW request (enters at `input`)
+resume_turn(thread_id, value)            # supply what an interrupt asked for
+```
+Both return a dict the caller switches on — `{"kind":"answer","content":…}` when the
+turn is done, or `{"kind":"clarify"|"decision"|"choice"|"approve","payload":…}` when
+the graph paused for the user. `_interpret()` detects a pause via the `__interrupt__`
+key on the invoke result.
+
+### 9. End-to-end test journeys — `agents/test_e2e.py`
+Read-only journeys go through `api.start_turn`; write journeys invoke `app_graph`
+directly with `email_dry_run=True` and **clean up** every incident/booking they create.
+1. **refusal** — "capital of France?" → `input`(unsafe) → `output`.
+2. **general** — "what can you do?" → `supervisor`(general) → `output`.
+3. **analytics** — "how many incidents are open?" → generate → review → execute → `output`.
+4. **troubleshoot → technician** — "M01 bed won't heat (thermistor)" → diagnosis(needs_technician) → verifier → `technician_action` → `output`.
+5. **troubleshoot → self** — "M03 not sticking" → decider *(resume: self)* → self_action *(resume: complete)* → `output`.
 
 ## Running it
-
-> CLI driver + launch order. *(to be added.)*
+```bash
+python mcp_server/server.py http     # 1) start the HTTP services server (separate terminal)
+python agents/run.py                 # 2) interactive CLI (one process = one conversation/thread)
+python agents/test_e2e.py            # or: the end-to-end journeys above
+```
+The stdio tools server is auto-spawned by the client; only the HTTP server is
+launched manually. Both need `GROQ_API_KEY` + `GOOGLE_API_KEY` in `.env`.

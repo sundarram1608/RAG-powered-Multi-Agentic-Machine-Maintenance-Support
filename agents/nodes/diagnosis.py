@@ -68,11 +68,15 @@ def _build_evidence(symptom, machine_id, mvc_code, manual, safety, db_facts) -> 
     )
 
 
-def _synthesize(symptom, machine_id, mvc_code, manual, safety, db_facts) -> Diagnosis:
+def _synthesize(symptom, machine_id, mvc_code, manual, safety, db_facts,
+                prior_issues=None) -> Diagnosis:
+    human = _build_evidence(symptom, machine_id, mvc_code, manual, safety, db_facts)
+    if prior_issues:
+        human += ("\n\nA previous attempt was REJECTED by the verifier for these "
+                  f"reasons — address them: {prior_issues}")
     return get_reasoner().with_structured_output(Diagnosis).invoke([
         SystemMessage(content=DIAGNOSIS_SYSTEM),
-        HumanMessage(content=_build_evidence(symptom, machine_id, mvc_code,
-                                             manual, safety, db_facts)),
+        HumanMessage(content=human),
     ])
 
 
@@ -101,9 +105,16 @@ async def diagnosis_node(state: dict) -> dict:
     db_facts = {"overdue": overdue, "maintenance_history": history, "incidents": incidents}
 
     # --- synthesize, with corrective-RAG re-query while confidence is low ---
+    # On a verify-driven retry, fold the verifier's issues in so we self-correct.
+    prior_issues = None
+    verdict = state.get("verdict")
+    if verdict and not verdict.get("approved"):
+        prior_issues = verdict.get("issues")
+
     diagnosis = None
     for attempt in range(config.MAX_DIAGNOSIS_REQUERIES):
-        diagnosis = _synthesize(symptom, machine_id, mvc_code, manual, safety, db_facts)
+        diagnosis = _synthesize(symptom, machine_id, mvc_code, manual, safety, db_facts,
+                                prior_issues=prior_issues)
         last = attempt == config.MAX_DIAGNOSIS_REQUERIES - 1
         if diagnosis.retrieval_confidence != "low" or last:
             break

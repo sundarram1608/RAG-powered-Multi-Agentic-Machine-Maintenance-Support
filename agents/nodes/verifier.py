@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # agents/ on path
+import config
 from llms import get_judge
 from schemas import Verdict
 from prompts.verifier import VERIFIER_SYSTEM, VERIFIER_SYSTEM_VERSION
@@ -72,11 +73,14 @@ def verifier_node(state: dict) -> dict:
         SystemMessage(content=VERIFIER_SYSTEM),
         HumanMessage(content=human),
     ])
+    attempts = state.get("verify_attempts", 0) + 1
+    exhausted = (not verdict.approved) and attempts >= config.VERIFY_MAX_ATTEMPTS
     versions = dict(state.get("prompt_versions", {}))
     versions["verifier"] = VERIFIER_SYSTEM_VERSION
     return {
         "verdict": verdict.model_dump(),
-        "verify_attempts": state.get("verify_attempts", 0) + 1,
+        "verify_attempts": attempts,
+        "verifier_exhausted": exhausted,
         "prompt_versions": versions,
     }
 

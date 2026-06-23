@@ -28,8 +28,22 @@ def _user_text(state: dict) -> str:
     return messages[-1].content if messages else ""
 
 
+# Per-request scratch cleared at the start of every NEW request (input runs at
+# START; interrupt resumes bypass it). messages + current_user_id are NOT reset.
+_SCRATCH_RESET = {
+    "intent": None,
+    "machine_id": None, "mvc_code": None, "machine_status": None, "symptom": None,
+    "needs_clarification": False, "clarification_question": None,
+    "retrieved_context": None, "db_facts": None, "diagnosis": None,
+    "verdict": None, "verify_attempts": 0, "verifier_exhausted": False,
+    "decision_path": None, "manage_plan": None, "action_result": None,
+    "sql_plan": None, "sql_review": None, "sql_result": None,
+    "analytics_attempts": 0, "sql_answer": None, "final_response": None,
+}
+
+
 def input_node(state: dict) -> dict:
-    """Screen the user turn; return {input_safe, guard_reason, prompt_versions}."""
+    """Reset per-request scratch, then screen the user turn."""
     user_text = _user_text(state)
     llm = get_reasoner().with_structured_output(GuardResult)
     result = llm.invoke([
@@ -40,6 +54,7 @@ def input_node(state: dict) -> dict:
     versions = dict(state.get("prompt_versions", {}))
     versions["input"] = INPUT_SYSTEM_VERSION
     return {
+        **_SCRATCH_RESET,
         "input_safe": result.safe,
         "guard_reason": result.reason,
         "prompt_versions": versions,

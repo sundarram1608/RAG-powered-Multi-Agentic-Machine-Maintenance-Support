@@ -72,6 +72,8 @@ def _manage(state: dict) -> str:
     plan = state.get("manage_plan") or {}
     inc = plan.get("incident_id") or (ar.get("result") or {}).get("incident_id")
     action = ar.get("action")
+    if action == "cancelled":
+        return "Okay — cancelled. No changes were made."
     if action == "close":
         return f"Incident {inc} has been closed."
     if action == "update_comment":

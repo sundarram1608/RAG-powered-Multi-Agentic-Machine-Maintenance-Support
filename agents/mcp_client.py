@@ -49,9 +49,19 @@ def parse_tool_result(raw, expect_list=False):
     return raw
 
 
+_tools_cache = None
+
+
 async def get_all_tools():
-    """All MCP tools (union of the stdio + HTTP servers) as LangChain tools."""
-    return await _client.get_tools()
+    """All MCP tools (union of the stdio + HTTP servers), cached after first fetch.
+
+    The returned LangChain tools open their own short-lived session per call, so
+    caching the LIST is safe and avoids re-listing both servers on every node.
+    """
+    global _tools_cache
+    if _tools_cache is None:
+        _tools_cache = await _client.get_tools()
+    return _tools_cache
 
 
 def tools_for(agent_name: str, all_tools) -> list:
