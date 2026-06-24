@@ -136,15 +136,61 @@ per request (reused while paused). The `observability/` package sits **beside**
    LANGSMITH_PROJECT=fdm-agentic
    # LANGSMITH_ENDPOINT=https://api.smith.langchain.com   # eu.api... if your org is EU
    ```
-3. **Verify**:
-   ```bash
-   python observability/trace_smoke.py
-   ```
-   Prints the run URL and asserts PII was masked. Open the link → you should see the
-   run tree, the metadata, and (after a few turns) the Threads grouping.
+3. **Verify** — see §8 below.
 
 Tracing is **gated by `LANGSMITH_TRACING`** — set it to anything but `true` and this
 layer becomes a no-op (the app runs identically, untraced). No node code depends on it.
+
+## 8. How to check it's working
+
+### 8.1 Automated smoke test
+```bash
+python observability/trace_smoke.py
+```
+It runs one cheap traced turn (a refusal — `input → output`, a single LLM call, **no
+MCP server needed**) with a phone + email planted in the message, then reads the run
+back from LangSmith and checks the masking. Expected output:
+```
+kind   : answer
+reply  : I can only help with FDM 3D-printer maintenance and service ...
+run_id : becf1436-9c40-475f-9b97-afa4996ea1eb
+url    : https://smith.langchain.com/o/.../r/becf1436-...?poll=true
+PII masking: OK — phone & email redacted
+metadata.session_id=smoke-thread turn_id=9fdfae5b... intent=None
+```
+Pass criteria: **`PII masking: OK`**, a non-empty `url`, and `session_id` + `turn_id`
+populated. (`intent=None` is correct here — a refusal never reaches the supervisor.)
+
+### 8.2 Confirm in the LangSmith UI
+Open the printed `url` (or go to `smith.langchain.com` → project **`fdm-agentic`**) and check:
+- **Run tree** — the trace shows `input → output` as nested runs (for a real
+  troubleshoot turn you'd see `input → supervisor → intake → diagnosis → verifier → …`,
+  with each LLM/MCP-tool call as a leaf).
+- **No PII** — open the root run's *Inputs*; the planted number/email read
+  `[redacted-phone]` / `[redacted-email]`.
+- **Metadata** — the run's *Metadata* tab shows `session_id`, `turn_id`, `user_id`,
+  `models`, and (after `enrich_run`) `intent`, `needs_technician`, `verdict_score`, etc.
+- **Latency / tokens / cost** — populated on each run.
+
+### 8.3 Confirm turn + thread grouping (multi-turn)
+```bash
+python mcp_server/server.py http      # separate terminal (troubleshoot needs tools)
+python agents/run.py
+```
+Have a short conversation that includes a clarification (so one turn spans a
+start + a resume). Then in LangSmith open **Threads**:
+- all turns of that session group under one **`thread_id`**;
+- the clarification turn's start + resume share one **`turn_id`** (labelled
+  `turn:start` / `turn:resume`) — this is how separate turns are told apart.
+
+### 8.4 Troubleshooting
+| Symptom | Likely cause / fix |
+|---|---|
+| Smoke test prints `LANGSMITH_TRACING is not 'true'` | `LANGSMITH_TRACING=true` missing/typo in `.env` |
+| `url` empty / `Could not read the run back` | bad/expired `LANGSMITH_API_KEY`, or wrong region — set `LANGSMITH_ENDPOINT` (EU: `https://eu.api.smith.langchain.com`) |
+| No traces in the UI | you ran a path that bypasses `api.py` (e.g. direct `app_graph.ainvoke`) — only turns through `start_turn`/`resume_turn` are traced (see the design note below) |
+| Each turn appears **twice** | the env auto-tracer wasn't disabled — ensure `observability` is imported before any invoke (it is, via `api.py`) |
+| `PII masking: LEAK` | the redactor regex didn't match — check `_EMAIL_RE` / `_PHONE_RE` in `tracing.py` |
 
 ### Design note — why we attach our own tracer
 Importing this module **disables the env auto-tracer** and attaches an explicit,
@@ -155,7 +201,7 @@ does). Direct `app_graph.ainvoke(...)` calls that bypass `api.py` (e.g. parts of
 
 ---
 
-## 8. Files
+## 9. Files
 
 | File | Purpose |
 |---|---|
@@ -168,7 +214,7 @@ Consumed by `agents/api.py` (`start_turn` / `resume_turn`).
 
 ---
 
-## 9. What's next
+## 10. What's next
 
 - **Frontstage progress (Phase 6):** `stream_turn` over `app_graph.astream` →
   per-node status + token streaming in the Streamlit UI.
