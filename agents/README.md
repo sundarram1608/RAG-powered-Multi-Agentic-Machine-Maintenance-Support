@@ -6,9 +6,9 @@ to troubleshoot FDM 3D-printer faults, answer analytics questions, and take
 actions (open incidents, book technicians, notify people) — with verification and
 human-in-the-loop before anything irreversible.
 
-> Build status: **Phase 4a (foundations) ✅** · nodes & graph in progress.
-> The workflow **graph diagram** will be generated from the compiled graph at the
-> end of Phase 4 and embedded here. *(placeholder — to be added.)*
+> Build status: **Phase 4 ✅** — all 12 agents built + the compiled LangGraph
+> workflow (see the **Graph assembly (Phase 4c)** section for the embedded diagram).
+> (Project-wide: Phases 0–5 complete; the Streamlit app is Phase 6.)
 
 ---
 
@@ -65,16 +65,16 @@ Incident** (approval interrupt before writes) → **Output**; *general* = direct
 ## How it connects to the app
 
 The compiled graph is the **only** thing a front-end talks to, through a thin
-boundary (built later):
+boundary in [`api.py`](api.py):
 
 ```
-start_turn(thread_id, user_id, message) -> Result
+start_turn(thread_id, user_id, message) -> Result   # Result carries kind/content/turn_id/run_id
 resume_turn(thread_id, value)           -> Result   # answer a clarification / approve an action
 ```
 - `thread_id` = one chat (memory + pause/resume via the checkpointer).
 - `user_id` = the logged-in operator's `employee_id` (drives `create_incident(reported_by=…)` and notifications — set from login, never asked in chat).
 - `interrupt()` points (Intake clarify, Decider choice, Technician-Action approval) surface as `needs_input`/`needs_approval`; the app renders a prompt / Approve-Reject and calls `resume_turn`.
-- **Now:** a CLI driver (`run.py`, later) calls these. **Phase 6:** Streamlit wraps the *same* functions — no graph changes.
+- **Now:** a CLI driver ([`run.py`](run.py)) calls these. **Phase 6:** Streamlit wraps the *same* functions — no graph changes. The returned `run_id` lets the UI attach feedback (`observability.log_feedback`).
 
 ## Memory & threads
 
