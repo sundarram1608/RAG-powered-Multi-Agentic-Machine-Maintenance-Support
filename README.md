@@ -3,7 +3,7 @@
 A multi-agent AI workflow for **manufacturing equipment troubleshooting, maintenance and service**, built with
 LangGraph (orchestration), RAG over a vector database (knowledge), and MCP (tools/actions).
 
-> Status: ✅ Multi-agent workflow assembled (12 agents, LangGraph) — observability (LangSmith) + UI next.
+> Status: ✅ Phases 0–5 complete — 12-agent LangGraph workflow + observability, evaluation & governance (LangSmith). Streamlit UI (Phase 6) next.
 
 ---
 ## Building the Project from Scratch
@@ -176,11 +176,75 @@ python agents/test_routing.py
 ```
 Full guide (topology, every edge, interrupts, turn/memory model) → [`agents/README.md`](agents/README.md)
 
-### 5. Observability + app — *(coming soon)*
-LangSmith tracing + RAG eval (Phase 5), then the Streamlit UI (Phase 6). A UI
-**skeleton** already exists in [`app/`](app/) (`main.py` + `app_utils.py`) — the
-chat shell is wired, but `run_agent()` is still a stub; Phase 6 connects it to
-`agents/api.py` (`start_turn`/`resume_turn`).
+### 5. Observability, Evaluation & Governance (Phase 5)
+
+**Purpose:** make the workflow **observable, measurably correct, and governed** — all
+**backstage**: none of this changes the live agent's behaviour. Three pillars:
+
+**A. Observability — [`observability/`](observability/) (5a).** Every turn is traced to
+LangSmith (run tree, latency, tokens, cost), grouped by conversation/turn, with **PII
+masked** before upload.
+
+**B. Evaluation — [`eval/`](eval/) (5b → 5d).** Golden datasets (5b) → evaluators +
+`run_eval` + an **Excel scorecard** + LangSmith Experiments (5c) → **tuning** sweeps for
+the reranker/verifier/diagnosis dials (5d). Grades RAG groundedness, retrieval, routing,
+SQL, safety red-team, and incident management. The eval **judge** runs on OpenRouter
+(separate quota; the live agent never calls it).
+
+**C. Governance — [`eval/versioning_and_ci/`](eval/versioning_and_ci/) + [`observability/governance.py`](observability/governance.py) (5e → 5f).**
+Version-stamp every experiment + a **regression gate** that fails CI on a quality drop
+(5e); **human feedback capture** + a **review queue** that routes risky runs
+(low-confidence / escalations / DB writes) to a human (5f). PII masking is also a
+governance control.
+
+> **Grouping notes (as asked):** **Versioning + CI** sits under **Governance** (it's a
+> change/process control, though it consumes Evaluation outputs). **Safety** is
+> *cross-cutting*, not a standalone phase — its *evaluation* (input-guard red-team +
+> PII-leak checks) lives under **Evaluation** (`safety_redteam`); its *enforcement* (PII
+> masking, the input guard) lives under **Governance/Observability**.
+
+**Run order (fresh fork, after steps 0–4). Prereqs: `.env` has `GROQ_API_KEY`,
+`GOOGLE_API_KEY`, `LANGSMITH_API_KEY` (+ `OPENROUTER_API_KEY` for the eval judge); the DB
+is up; the RAG index is built.**
+```bash
+# 5a — observability (tracing auto-on once LANGSMITH_TRACING=true)
+python observability/trace_smoke.py
+
+# 5b — datasets: validate, verify gold SQL vs DB, upload to LangSmith
+python eval/build/validate_datasets.py
+python eval/build/derive_sql_expectations.py
+python eval/build/upload_datasets.py
+
+# 5c — evaluation: graders -> Experiments + eval/results/eval_<ts>.xlsx
+python mcp_server/server.py http              # separate terminal (troubleshoot/manage need it)
+python eval/run_eval.py                       # ⚠ Groq free cap is 100k tokens/day — spread datasets across days
+#   or per-dataset, e.g.: python eval/run_eval.py --dataset routing
+
+# 5d — tuning (reranker is free/offline; the other two need the server + judge)
+python eval/tuning/reranker_sweep.py
+python eval/tuning/verifier_calibration.py
+python eval/tuning/diagnosis_sweep.py
+
+# 5e — versioning + regression gate (reads LangSmith; zero tokens)
+python eval/versioning_and_ci/ci_gate.py --bless   # bless baseline from valid runs
+python eval/versioning_and_ci/ci_gate.py           # gate: exit 0 (pass) / 1 (regression)
+
+# 5f — governance: review-queue flagging is AUTOMATIC during 5c/runtime;
+#      feedback (observability.log_feedback) is called by the Phase 6 UI
+```
+Full guides: [`observability/README.md`](observability/README.md) and [`eval/README.md`](eval/README.md).
+
+> **Reproducibility:** the datasets, build steps, and **deterministic** metrics
+> (routing/SQL/retrieval/safety/manage) reproduce exactly. **LLM-judge** metrics
+> (faithfulness/answer-relevance) vary run-to-run (model nondeterminism + free-tier rate
+> limits), so exact *scores* aren't bit-reproducible — the *structure and deterministic
+> results* are.
+
+### 6. Application (Phase 6) — *(coming soon)*
+A **Streamlit UI** for operators/technicians/supervisors. A **skeleton** already exists
+in [`app/`](app/) (`main.py` + `app_utils.py`) — the chat shell is wired, but
+`run_agent()` is a stub; Phase 6 connects it to `agents/api.py`
+(`start_turn`/`resume_turn`, which stream progress and return `run_id` for feedback).
 
 ---
 
