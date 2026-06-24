@@ -1,10 +1,7 @@
 # Evaluation layer — datasets & experiments
 
-This folder holds the **offline evaluation** of the agent workflow: curated golden
-datasets (Phase 5b) and the evaluators + runner that grade the agents against them
-(Phase 5c–5e). It is **backstage** — it never changes runtime behaviour. It reads the
-knowledge base **read-only** to derive ground truth, and produces measurable scores
-you can open and compare in LangSmith.
+This folder holds the **offline evaluation** of the agent workflow: curated golden datasets and the evaluators + runner that grade the agents against them
+(Phase 5c–5e). It is **backstage** — it never changes runtime behaviour. It reads the knowledge base **read-only** to derive ground truth, and produces measurable scores you can open and compare in LangSmith.
 
 > Status: **5b (datasets) ✅ · 5c (evaluators + `run_eval.py` + Excel) ✅.** 6 datasets
 > (100 examples) validated, SQL gold answers DB-verified; the runner produces a
@@ -12,9 +9,10 @@ you can open and compare in LangSmith.
 > is next.
 
 ### Eval judge note (free-tier reality)
+
 The judge is decoupled on **OpenRouter** (`EVAL_JUDGE_MODEL`). We picked an independent
 family (distinct from the Llama diagnoser + Gemini verifier). The intended
-`deepseek-*:free` was retired to paid, so the default is **`qwen/qwen3-next-80b-a3b-instruct:free`**
+`deepseek-*:free` was retired to paid, so the default is `**qwen/qwen3-next-80b-a3b-instruct:free`**
 (Qwen — still independent). **Free OpenRouter models are heavily rate-limited upstream**
 (`429`), so LLM-judge scores (faithfulness, answer relevance) may come back as
 `judge error` under load — the eval **degrades gracefully** (records the error, keeps
@@ -36,7 +34,7 @@ JSONL (source of truth)  ──►  validate_datasets.py ──►  upload_datas
 - **Datasets (5b):** the "exam" — fixed `input → reference` pairs.
 - **Evaluators (5c):** the "grader" — score the agent's answer vs the reference.
 - **Experiments (5c):** the "report card" — per-example scores + aggregates, openable
-  and comparable in the LangSmith UI.
+and comparable in the LangSmith UI.
 
 The local **JSONL is the source of truth** (human-readable, git-versioned, citation
 backed). LangSmith holds an uploaded copy for the experiment machinery (§4).
@@ -48,14 +46,16 @@ backed). LangSmith holds an uploaded copy for the experiment machinery (§4).
 5b changes **no** runtime code. Each dataset *targets* a portion of the graph — 5c
 will exercise that portion against it.
 
-| Dataset | Workflow portion under test | Graph nodes | Grader (5c) |
-|---|---|---|---|
-| `troubleshoot_cases` | the diagnosis chain | `intake → diagnosis → verifier → needs_technician gate` | LLM-judge (faithfulness, answer relevance) + exact gate check |
-| `retrieval_labels` | RAG retrieval + reranker | `rag/retriever.py`, `user_manual_retrieval`, `safety_retrieval` | deterministic (precision@k, recall@k, MRR, nDCG) |
-| `sql_cases` | analytics text-to-SQL | `analytics_generate → text_to_sql_reviewer → analytics_execute` | deterministic (row match, read-only, no `phone`) |
-| `routing_cases` | intent routing + extraction | `supervisor` (+ `intake`, `decider`) | exact-match accuracy |
-| `safety_redteam` | input guard + PII scrub | `input`, `output` | label match + PII regex |
-| `manage_cases` | incident management | `manage_resolve` | action match + approval-gate check |
+
+| Dataset              | Workflow portion under test | Graph nodes                                                     | Grader (5c)                                                   |
+| -------------------- | --------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------- |
+| `troubleshoot_cases` | the diagnosis chain         | `intake → diagnosis → verifier → needs_technician gate`         | LLM-judge (faithfulness, answer relevance) + exact gate check |
+| `retrieval_labels`   | RAG retrieval + reranker    | `rag/retriever.py`, `user_manual_retrieval`, `safety_retrieval` | deterministic (precision@k, recall@k, MRR, nDCG)              |
+| `sql_cases`          | analytics text-to-SQL       | `analytics_generate → text_to_sql_reviewer → analytics_execute` | deterministic (row match, read-only, no `phone`)              |
+| `routing_cases`      | intent routing + extraction | `supervisor` (+ `intake`, `decider`)                            | exact-match accuracy                                          |
+| `safety_redteam`     | input guard + PII scrub     | `input`, `output`                                               | label match + PII regex                                       |
+| `manage_cases`       | incident management         | `manage_resolve`                                                | action match + approval-gate check                            |
+
 
 ---
 
@@ -66,6 +66,7 @@ Every example is `{id, inputs, reference, metadata}`. JSONL is the source of tru
 PDFs** during build — never invented.)
 
 ### 3.1 `troubleshoot_cases.jsonl` — `intake → diagnosis → verifier → gate`
+
 Use cases: operator-fixable, technician-required (drives the gate), safety-critical,
 and out-of-manual (low confidence). References are **themes + cited pages**, not exact
 text, because LLM wording varies.
@@ -90,6 +91,7 @@ text, because LLM wording varies.
 ```
 
 ### 3.2 `retrieval_labels.jsonl` — RAG retriever + reranker
+
 Use cases: machine-specific manual retrieval (filtered by `mvc_code`), safety
 retrieval (NIOSH), and a topic spanning several pages. Relevance is labelled by
 **(source_file, page range)** — robust to re-indexing (chunk ids are not).
@@ -102,6 +104,7 @@ retrieval (NIOSH), and a topic spanning several pages. Relevance is labelled by
 ```
 
 ### 3.3 `sql_cases.jsonl` — analytics + reviewer (deterministic from the DB)
+
 Ground truth is **computable** (DB anchored to `REFERENCE_TODAY = 2026-06-16`). 5c runs
 the agent's SQL *and* `gold_sql` against the DB and compares result sets.
 Use cases: count, filter, join, inventory, **PII trap**, ambiguous.
@@ -117,6 +120,7 @@ Use cases: count, filter, join, inventory, **PII trap**, ambiguous.
 ```
 
 ### 3.4 `routing_cases.jsonl` — supervisor (+ extraction)
+
 One per intent + boundary cases. Exact-match, no LLM.
 
 ```jsonc
@@ -129,6 +133,7 @@ One per intent + boundary cases. Exact-match, no LLM.
 ```
 
 ### 3.5 `safety_redteam.jsonl` — input guard + PII scrub
+
 Adversarial **and** benign (to measure false-refusal, not just false-accept).
 
 ```jsonc
@@ -141,6 +146,7 @@ Adversarial **and** benign (to measure false-refusal, not just false-accept).
 ```
 
 ### 3.6 `manage_cases.jsonl` — manage-incident resolver
+
 Use cases: close (with comment), assign/reassign, update_comment, unsupported,
 missing-id (clarify), and approval-gating.
 
@@ -159,20 +165,20 @@ The local JSONL is enough to *define* the exam. Uploading makes it **runnable,
 comparable, and inspectable** — that's the whole point of the eval workflow:
 
 1. **It binds a target to a fixed exam.** `evaluate(target, data="troubleshoot_cases",
-   evaluators=[...])` runs your agent over **every example server-side**, applies the
+  evaluators=[...])` runs your agent over **every example server-side**, applies the
    evaluators, and persists an **Experiment** tied to that dataset version. No ad-hoc
    scripts re-implementing "loop over cases."
 2. **Apples-to-apples comparison over time.** Change a prompt or model, re-run → a new
-   Experiment on the **same dataset version**. LangSmith shows side-by-side, per-example
+  Experiment on the **same dataset version**. LangSmith shows side-by-side, per-example
    score deltas and highlights regressions. This is the backbone of versioning + the CI
    gate (5e): "did this change improve or break things?"
 3. **Drill-down on every failure.** Each example's eval run is itself a full trace — click
-   a low-scoring row and see *why* (which chunks were retrieved, what the LLM wrote, where
+  a low-scoring row and see *why* (which chunks were retrieved, what the LLM wrote, where
    it went wrong). You can't get that from a console number.
 4. **Grow the exam from real failures.** A bad production trace → "add to dataset" in one
-   click → it's now a permanent regression test.
+  click → it's now a permanent regression test.
 5. **Versioning + provenance.** Dataset edits create versions; experiments pin a version,
-   so a score always refers to a known exam.
+  so a score always refers to a known exam.
 6. **Shareable + collaborative.** Datasets/experiments live in the workspace UI.
 
 > You *can* run `evaluate()` against a local list without uploading — fine for a quick
@@ -188,62 +194,68 @@ Yes — there's a concrete, openable artifact. After `run_eval.py`:
 - **An Experiment page in LangSmith** (the runner prints its URL). It shows a table:
   - **rows** = dataset examples,
   - **columns** = evaluator scores (e.g. `faithfulness`, `needs_technician_correct`,
-    `precision@k`, `sql_rows_match`, `guard_correct`) + the agent's output + latency + cost,
+  `precision@k`, `sql_rows_match`, `guard_correct`) + the agent's output + latency + cost,
   - **a summary header** = aggregate score per evaluator (e.g. *faithfulness 0.86*,
-    *routing accuracy 0.92*).
+  *routing accuracy 0.92*).
   - Click any row → the full trace for that example.
 - **A comparison view** — select two Experiments → per-example diffs, regressions in red.
 - **A local summary** — `run_eval.py` also prints a console table and writes a
-  markdown/JSON summary under `eval/results/`, so you get scores even offline.
+markdown/JSON summary under `eval/results/`, so you get scores even offline.
 - **An Excel workbook** — `eval/results/eval_<timestamp>.xlsx` (openpyxl), the
-  reviewer-friendly view (see below).
+reviewer-friendly view (see below).
 - **A CI verdict (5e)** — `ci_gate.py` reads the aggregates against thresholds and exits
-  non-zero on a regression (for pre-merge gating).
+non-zero on a regression (for pre-merge gating).
 
 So performance is visible four ways: the **LangSmith Experiment UI** (richest), an
 **Excel workbook**, a **local markdown/JSON summary**, and a **pass/fail CI exit code**.
 
 ### 5.1 The Excel results workbook
+
 `run_eval.py` (5c) writes an `.xlsx` with **one sheet per dataset** plus a **Summary**
 sheet. Each dataset sheet has one row per example with these columns:
 
-| Column | Meaning |
-|---|---|
-| `case_id` | the example id (e.g. `ts_bed_adhesion_m03`) |
-| `input` | the question / symptom / utterance sent to the agent |
-| `expected` | the reference (themes, gold answer, intent, expected pages, …) |
-| `agent_output` | what the agent actually produced |
-| `scores` | per-metric scores, e.g. `faithfulness=0.82; answer_relevance=0.90` |
-| `correct` | right / wrong (vs the reference) |
-| `result` | **PASS / FAIL** — every scored metric ≥ its threshold (`n/a` if nothing scored) |
-| `comments` | per-metric notes / why it failed (e.g. "got analytics, want manage_incident") |
 
-The **Summary** sheet has one row per dataset — `dataset · examples · pass · fail ·
-n/a · pass_rate` — so you can open one file and see exactly *what was asked, what the
+| Column         | Meaning                                                                         |
+| -------------- | ------------------------------------------------------------------------------- |
+| `case_id`      | the example id (e.g. `ts_bed_adhesion_m03`)                                     |
+| `input`        | the question / symptom / utterance sent to the agent                            |
+| `expected`     | the reference (themes, gold answer, intent, expected pages, …)                  |
+| `agent_output` | what the agent actually produced                                                |
+| `scores`       | per-metric scores, e.g. `faithfulness=0.82; answer_relevance=0.90`              |
+| `correct`      | right / wrong (vs the reference)                                                |
+| `result`       | **PASS / FAIL** — every scored metric ≥ its threshold (`n/a` if nothing scored) |
+| `comments`     | per-metric notes / why it failed (e.g. "got analytics, want manage_incident")   |
+
+
+The **Summary** sheet has one row per dataset — `dataset · examples · pass · fail · n/a · pass_rate` — so you can open one file and see exactly *what was asked, what the
 agent said, whether it's right, pass/fail, and why*. The `result` cell is colour-coded
 (PASS green / FAIL red) for a quick scan.
 
 ---
 
 ## 6. Dataset schema & conventions
+
 - **Themes, not exact text** (troubleshoot): references are keyword/theme sets + cited
-  pages; the LLM-judge checks faithfulness against the pages, and we exact-check booleans
-  like `needs_technician`.
+pages; the LLM-judge checks faithfulness against the pages, and we exact-check booleans
+like `needs_technician`.
 - **Page-range relevance** (retrieval): label by `(source_file, page_start..page_end)`; a
-  retrieved chunk counts as relevant if its page falls in a labelled range.
+retrieved chunk counts as relevant if its page falls in a labelled range.
 - **Gold SQL** (analytics): store a correct `gold_sql`; 5c compares result sets against the
-  live DB (anchored to `2026-06-16`).
+live DB (anchored to `2026-06-16`).
 - `schemas.py` defines a Pydantic model per example type; `validate_datasets.py` enforces it.
 
 ---
 
 ## 7. Build scripts (`eval/build/`)
-| Script | Does |
-|---|---|
-| `inspect_corpus.py` | derive honest page citations — scans the indexed chunk **text** in Chroma by keyword (no embedder, no PDF scan) and prints `(source_file, page range, snippet)`; used to label `retrieval_labels` + `troubleshoot_cases` cited pages |
-| `validate_datasets.py` | schema-validate every JSONL row + referential checks: `machine_id`/`mvc_code` exist in the DB, cited pages within the document's page count, routing/manage enums, `gold_sql` parses + is read-only |
-| `derive_sql_expectations.py` | run/verify each `gold_sql` against the live DB to confirm the expected answer (keeps `sql_cases` honest; anchored to `2026-06-16`) |
-| `upload_datasets.py` | idempotent push of local JSONL → LangSmith datasets (replace-on-reupload); `--dry-run` to preview |
+
+
+| Script                       | Does                                                                                                                                                                                                                                 |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `inspect_corpus.py`          | derive honest page citations — scans the indexed chunk **text** in Chroma by keyword (no embedder, no PDF scan) and prints `(source_file, page range, snippet)`; used to label `retrieval_labels` + `troubleshoot_cases` cited pages |
+| `validate_datasets.py`       | schema-validate every JSONL row + referential checks: `machine_id`/`mvc_code` exist in the DB, cited pages within the document's page count, routing/manage enums, `gold_sql` parses + is read-only                                  |
+| `derive_sql_expectations.py` | run/verify each `gold_sql` against the live DB to confirm the expected answer (keeps `sql_cases` honest; anchored to `2026-06-16`)                                                                                                   |
+| `upload_datasets.py`         | idempotent push of local JSONL → LangSmith datasets (replace-on-reupload); `--dry-run` to preview                                                                                                                                    |
+
 
 > **Methodology note (provenance):** `retrieval_labels` and `troubleshoot_cases` page
 > ranges are derived from the **real indexed chunk text** via `inspect_corpus.py`
@@ -281,6 +293,7 @@ Current status: `validate_datasets.py` → **ALL VALID (100)**;
 ### 7.2 How to run the evaluation (5c)
 
 After the datasets are uploaded (§7.1 step 3):
+
 ```bash
 # troubleshoot + manage need the MCP HTTP server up; the others don't
 python mcp_server/server.py http        # separate terminal (for troubleshoot/manage)
@@ -288,17 +301,20 @@ python mcp_server/server.py http        # separate terminal (for troubleshoot/ma
 python eval/run_eval.py                  # all 6 datasets (default)
 python eval/run_eval.py --dataset routing   # one dataset (substring match) — fast, no server/judge
 ```
+
 Each dataset → a **LangSmith Experiment** (URL printed) + a row block in
 `eval/results/eval_<ts>.xlsx`. Prereqs: `LANGSMITH_API_KEY`, `OPENROUTER_API_KEY`,
 `GROQ_API_KEY`, `GOOGLE_API_KEY` in `.env`. Server/quota per dataset:
 
-| Dataset | Needs HTTP server | LLMs used |
-|---|---|---|
-| routing, safety | no | Groq |
-| sql | no | Groq + Gemini (reviewer) |
-| retrieval | no | local embedder + reranker |
-| troubleshoot | **yes** | Groq + Gemini + eval judge (OpenRouter) |
-| manage | **yes** | Groq |
+
+| Dataset         | Needs HTTP server | LLMs used                               |
+| --------------- | ----------------- | --------------------------------------- |
+| routing, safety | no                | Groq                                    |
+| sql             | no                | Groq + Gemini (reviewer)                |
+| retrieval       | no                | local embedder + reranker               |
+| troubleshoot    | **yes**           | Groq + Gemini + eval judge (OpenRouter) |
+| manage          | **yes**           | Groq                                    |
+
 
 Verified: `--dataset routing` → Experiment created, **25/25 PASS** (intent accuracy),
 Excel written.
@@ -306,6 +322,7 @@ Excel written.
 ---
 
 ## 8. Directory structure
+
 ```
 eval/
   __init__.py
@@ -331,24 +348,57 @@ eval/
     __init__.py                  # EVALUATORS registry (dataset -> graders)
     llm_judges.py                # faithfulness, answer_relevance (openevals)
     deterministic.py             # gate, retrieval (p@k/recall@k/MRR/nDCG), sql, routing, safety, manage
-  results/                       # eval outputs: eval_<ts>.xlsx (git-ignored)
+  tuning/                        # 5d — measure-then-tune the dials
+    reranker_sweep.py            # rerank on/off × candidates × k -> retrieval metrics (no LLM)
+    verifier_calibration.py      # inline verifier vs offline judge -> confusion + recommendation
+    diagnosis_sweep.py           # corrective-RAG requery depth vs faithfulness/cost
+    TUNING_LOG.md                # audit trail of every applied dial change
+  results/                       # eval outputs: eval_<ts>.xlsx + tuning/*.xlsx (git-ignored)
   ci_gate.py                     # 5e — thresholds -> pass/fail exit (TODO)
 ```
 
 ---
 
 ## 9. Constraints, provenance, versioning
+
 - **Quota:** datasets are small; the only LLM-graded set (`troubleshoot_cases`) is ~15.
-  The deterministic sets (retrieval/SQL/routing/safety) need no judge.
+The deterministic sets (retrieval/SQL/routing/safety) need no judge.
 - **Eval judge (5c):** runs on a **separate** provider (OpenRouter + DeepSeek,
-  `OPENROUTER_API_KEY`) so it never competes with the app's Groq/Gemini quota.
+`OPENROUTER_API_KEY`) so it never competes with the app's Groq/Gemini quota.
 - **Provenance:** troubleshoot/retrieval rows cite manual pages → auditable.
 - **Versioning:** JSONL in git + LangSmith dataset versions; experiments pin a version.
 - **Anchoring:** SQL gold answers assume `REFERENCE_TODAY = 2026-06-16`.
 
 ---
 
-## 10. How 5b connects forward
+## 10. Tuning (5d)
+
+5d uses the eval harness to **measure → turn a dial → re-measure**, changing only
+config values (never logic) and only when the metric improves. Three tools in
+`eval/tuning/` (all *report-only*; a change is applied after review and recorded in
+`TUNING_LOG.md` + an inline config comment):
+
+| Tool | Dial(s) | Ground truth / metric | Cost |
+|---|---|---|---|
+| `reranker_sweep.py` | `RERANK_CANDIDATES`, rerank on/off, `k` | labelled **pages** (`retrieval_labels`) → precision@k / recall@k / MRR / nDCG + latency | **free** (no LLM) |
+| `verifier_calibration.py` | Verifier strictness / `VERIFY_MAX_ATTEMPTS` | inline verdict vs **offline judge** on the diagnosis → false-reject/accept | heavy (server + LLMs + judge) |
+| `diagnosis_sweep.py` | `MAX_DIAGNOSIS_REQUERIES`, k | faithfulness / answer-relevance vs latency | heavy (server + LLMs + judge) |
+
+```bash
+python eval/tuning/reranker_sweep.py          # free, no server
+python mcp_server/server.py http              # the next two need the server
+python eval/tuning/verifier_calibration.py
+python eval/tuning/diagnosis_sweep.py
+```
+Each writes an `.xlsx` under `eval/results/tuning/`. **Applying a change:** review the
+report → I make the one-line config edit (with an inline comment: `old → new, metric
+before → after, date`) → add a row to `TUNING_LOG.md` → re-run the relevant
+`run_eval`/sweep to confirm. The retrieval ground truth is **pages, not the final
+answer** — so the reranker is judged purely on surfacing the right manual pages.
+
+## 11. How the phases connect
+
 5b produces the datasets. **5c** adds `evaluators/` + `run_eval.py` (binds the agent as
-the target, runs the graders, creates Experiments). **5e** adds `ci_gate.py` + logs
+the target, runs the graders, creates Experiments + Excel). **5d** (`tuning/`) tunes the
+RAG/diagnosis/verifier dials against those metrics. **5e** adds `ci_gate.py` + logs
 prompt/model versions so experiments are attributable and regressions block merges.
