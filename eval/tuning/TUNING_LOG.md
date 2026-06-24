@@ -27,6 +27,13 @@ audit trail of *why each dial is set where it is*.
 | 2026-06-24 | RERANK_CANDIDATES | 8 → 20 | recall@5 0.60 → 0.80 | reranker_sweep | eval/results/tuning/reranker_sweep_...xlsx |
 -->
 
+## Run status (2026-06-24)
+- `reranker_sweep` ✅ ran (results above).
+- `verifier_calibration` ❌ not yet run — the full 5c run before it exhausted the **Groq
+  free daily token cap (100k TPD)**; the first diagnosis call 429'd. Re-run after reset.
+- `diagnosis_sweep` ❌ not yet run — same Groq daily-cap. Re-run after reset (note: 45
+  diagnoses × reranking is the heaviest tool; run it on its own day / paid tier).
+
 ## Findings (observations, not dial changes)
 - **Reranker earns its keep on *ranking*, not recall.** rerank ON lifts MRR 0.48→0.55
   and nDCG 0.80→0.88 (right page ranked higher), but recall@k is flat at 0.60 across

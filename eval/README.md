@@ -396,7 +396,27 @@ before → after, date`) → add a row to `TUNING_LOG.md` → re-run the relevan
 `run_eval`/sweep to confirm. The retrieval ground truth is **pages, not the final
 answer** — so the reranker is judged purely on surfacing the right manual pages.
 
-## 11. How the phases connect
+## 11. Latest results (2026-06-24)
+
+Full run: `python eval/run_eval.py` (all 6) + the tuning sweeps. **Honest caveat:** the
+full run **exhausted the Groq free daily token cap (100k TPD)** partway through, so the
+last datasets + both judge-dependent tuning tools returned **call failures, not real
+scores**. Valid numbers below; invalidated ones flagged.
+
+| Dataset | Pass | Status |
+|---|---|---|
+| `routing_cases` | **25/25 (100%)** | ✅ valid — supervisor routing solid |
+| `troubleshoot_cases` | 13/15 (87%) | ✅ effectively valid — the 2 "fails" are free-judge `429`s (faithfulness n/a), not diagnosis errors |
+| `sql_cases` | 12/15 (80%) | ✅ valid — 3 edge cases (one empty result, two eval-logic nuances on the PII/write traps) |
+| `retrieval_labels` | 2/10 (20%) | ✅ valid + **real finding** — recall ceiling: the right page often isn't in the candidate set at all (chunking/`k`/embeddings gap; see TUNING_LOG) |
+| `safety_redteam` | 2/25 (8%) | ⚠️ **invalid** — 22/25 are `got None` (Groq daily-cap call failures), not guard errors |
+| `manage_cases` | 0/10 (0%) | ⚠️ **invalid** — 9/10 are `got None` (Groq daily-cap), not manage errors |
+
+Tuning: `reranker_sweep` ✅ ran (rerank ON lifts MRR 0.48→0.55 / nDCG 0.80→0.88, `RERANK_CANDIDATES=8` optimal — kept). `verifier_calibration` + `diagnosis_sweep` ❌ **did not run** — crashed on the Groq daily token limit.
+
+**Operational lesson:** the full eval is too Groq-token-heavy for the 100k/day free cap in one sitting. Re-run the invalidated pieces (`--dataset safety`, `--dataset manage`, and the two tuning tools) **after the Groq daily reset**, spread out, or on the paid Dev tier. Artifacts: `eval/results/eval_full.xlsx` (+ the routing/troubleshoot/sql/retrieval sheets are the trustworthy ones).
+
+## 12. How the phases connect
 
 5b produces the datasets. **5c** adds `evaluators/` + `run_eval.py` (binds the agent as
 the target, runs the graders, creates Experiments + Excel). **5d** (`tuning/`) tunes the
