@@ -26,3 +26,6 @@ langchain-mcp-adapters==0.3.0
 langchain-groq==1.1.3
 langchain-google-genai==4.2.5
 pydantic==2.13.4                  # structured outputs (agents/schemas.py); direct dep
+
+# ── Observability layer (Phase 5) ──
+langsmith==0.8.16                 # tracing + (later) eval; direct dep via observability/

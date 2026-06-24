@@ -5,42 +5,53 @@ Two functions, keyed by thread_id (one conversation = one thread; the MemorySave
 checkpointer isolates state per thread):
 
   start_turn(thread_id, user_id, message) -> a NEW request (enters at `input`,
-      which resets per-request scratch).
-  resume_turn(thread_id, value)           -> supply the value an interrupt asked
-      for (continues mid-graph; does NOT re-run upstream nodes).
+      which resets per-request scratch). Mints a fresh turn_id.
+  resume_turn(thread_id, value, *, turn_id, user_id) -> supply the value an
+      interrupt asked for (continues mid-graph). Pass the turn_id from the paused
+      start so all of one request's traces share it.
 
 Both return a dict the caller switches on:
-  {"kind": "answer", "content": <final_response>}                  # turn done
-  {"kind": "clarify"|"decision"|"choice"|"approve", "payload": …}  # paused for the user
+  {"kind": "answer", "content": <final_response>, "turn_id": ...}             # turn done
+  {"kind": "clarify"|"decision"|"choice"|"approve", "payload": …, "turn_id": …}  # paused
+
+Observability (Phase 5a): every invoke is traced to LangSmith via observability.*,
+grouped by thread_id (session) and turn_id, with PII masked and outcome metadata
+attached after the run. Tracing is a no-op unless LANGSMITH_TRACING=true in .env.
 """
 
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))  # agents/ on path
+sys.path.insert(0, str(Path(__file__).resolve().parent))           # agents/ on path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))       # repo root -> observability
 from graph import app_graph
 
+import observability as obs
 from langgraph.types import Command
 
 
-def _cfg(thread_id: str) -> dict:
-    return {"configurable": {"thread_id": thread_id}, "recursion_limit": 50}
-
-
-def _interpret(result: dict) -> dict:
+def _interpret(result: dict, turn_id: str) -> dict:
     interrupts = result.get("__interrupt__")
     if interrupts:
         payload = interrupts[0].value
-        return {"kind": payload.get("type", "needs_input"), "payload": payload}
-    return {"kind": "answer", "content": result.get("final_response")}
+        return {"kind": payload.get("type", "needs_input"), "payload": payload, "turn_id": turn_id}
+    return {"kind": "answer", "content": result.get("final_response"), "turn_id": turn_id}
 
 
-async def start_turn(thread_id: str, user_id: str, message: str) -> dict:
+async def start_turn(thread_id: str, user_id: str, message: str, turn_id: str = None) -> dict:
+    turn_id = turn_id or obs.new_turn_id()
+    cfg, run_id, meta = obs.make_config(
+        thread_id, user_id, message, turn_id=turn_id, run_name="turn:start")
     result = await app_graph.ainvoke(
-        {"user_input": message, "current_user_id": user_id}, _cfg(thread_id))
-    return _interpret(result)
+        {"user_input": message, "current_user_id": user_id}, cfg)
+    obs.enrich_run(run_id, meta, result)
+    return _interpret(result, turn_id)
 
 
-async def resume_turn(thread_id: str, value) -> dict:
-    result = await app_graph.ainvoke(Command(resume=value), _cfg(thread_id))
-    return _interpret(result)
+async def resume_turn(thread_id: str, value, turn_id: str = None, user_id: str = None) -> dict:
+    turn_id = turn_id or obs.new_turn_id()
+    cfg, run_id, meta = obs.make_config(
+        thread_id, user_id, str(value), turn_id=turn_id, run_name="turn:resume")
+    result = await app_graph.ainvoke(Command(resume=value), cfg)
+    obs.enrich_run(run_id, meta, result)
+    return _interpret(result, turn_id)

@@ -25,6 +25,7 @@ async def main():
     print(f"Agentic FDM Services — thread={thread} user={user_id}. Type 'quit' to exit.\n")
 
     paused = False
+    turn_id = None
     while True:
         try:
             msg = input("you> ").strip()
@@ -35,7 +36,11 @@ async def main():
         if not msg:
             continue
 
-        res = await (resume_turn(thread, msg) if paused else start_turn(thread, user_id, msg))
+        if paused:   # reuse the paused turn's id so its traces group together
+            res = await resume_turn(thread, msg, turn_id=turn_id, user_id=user_id)
+        else:
+            res = await start_turn(thread, user_id, msg)
+        turn_id = res.get("turn_id")
         if res["kind"] == "answer":
             print(f"\nbot> {res['content']}\n")
             paused = False
