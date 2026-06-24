@@ -13,7 +13,10 @@ import json
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(ROOT / ".env", override=False)   # LANGSMITH_API_KEY for the Client
 sys.path.insert(0, str(ROOT / "eval" / "datasets"))
 from schemas import DATASETS
 
