@@ -84,7 +84,7 @@ async def run():
 
     print(f"\nConfusion: true_accept={ta} true_reject={tr} FALSE_REJECT={fr} FALSE_ACCEPT={fa} (skipped {skipped})")
     if fr and not fa:
-        print("Recommendation: Verifier is TOO STRICT — soften it (approve when score>=0.6, or relax the prompt).")
+        print("Recommendation: Verifier is TOO STRICT — soften it (approve when verdict score >= 3 of 5, or relax the prompt).")
     elif fa and not fr:
         print("Recommendation: Verifier is TOO LAX — tighten it (raise approval bar / sharpen the prompt).")
     elif fr and fa:

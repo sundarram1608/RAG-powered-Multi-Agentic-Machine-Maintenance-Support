@@ -171,12 +171,13 @@ Importing this module **disables the env auto-tracer** and attaches an explicit,
 
 ## 9. Governance hooks (Phase 5f)
 
-Three free governance hooks (all no-ops unless `LANGSMITH_TRACING=true`):
+Phase 5f's free governance hooks (all no-ops unless `LANGSMITH_TRACING=true`). **PII
+masking** is the third 5f governance control but lives in `tracing.py` (see §5); the
+two hooks in **`governance.py`** are:
 
-1. **PII masking** — done (see §5): the redactor strips phone/email before any upload.
-2. **Feedback capture** — `log_feedback(run_id, score, comment)` records a human
+1. **Feedback capture** — `log_feedback(run_id, score, comment)` records a human
    thumbs-up/down on a turn's trace (`score`: `1`=👍, `0`=👎).
-3. **Review queue** — `flag_for_review(run_id, reason)` adds a run to a LangSmith
+2. **Review queue** — `flag_for_review(run_id, reason)` adds a run to a LangSmith
    **annotation queue** (`fdm-review`, auto-created) for human review.
 
 ### How they're used in real time
@@ -194,7 +195,7 @@ turns" and turn them into new eval cases.
 
 **Review queue (automatic).** Every turn, `enrich_run` calls `review_reason(state)`;
 qualifying runs are auto-routed to the `fdm-review` queue. Current criteria:
-`verifier_exhausted` · `verdict_score < 0.6` · supervisor escalation · any
+`verifier_exhausted` · low verdict score (`≤ 2` of 5) · supervisor escalation · any
 `manage_incident` DB write. **No app code needed** — it happens on each traced turn.
 A reviewer then opens **LangSmith → Annotation Queues → `fdm-review`**, sees each
 flagged run (symptom, retrieved context, diagnosis, action), and labels it 👍/👎 +
@@ -219,6 +220,6 @@ Consumed by `agents/api.py` (`start_turn` / `resume_turn`, which return `run_id`
 
 ## 11. What's next
 
-- **Evaluation, in `eval/`:** golden datasets + RAG groundedness (faithfulness, context precision/recall), retrieval metrics + reranker tuning, routing/SQL/structured-output validation, input-guard red-team + PII-leak checks, and a CI regression gate. The eval **judge** runs on a *separate* free provider (**OpenRouter + DeepSeek**, `OPENROUTER_API_KEY`) so it never competes with the app's Groq/Gemini quota — and many metrics (retrieval, SQL, routing, PII scan) need no LLM at all.
+- **Evaluation, in `eval/`:** golden datasets + RAG groundedness (faithfulness, context precision/recall), retrieval metrics + reranker tuning, routing/SQL/structured-output validation, input-guard red-team + PII-leak checks, and a CI regression gate. The eval **judge** runs on a *separate* provider (**OpenRouter**, an independent free model — `OPENROUTER_API_KEY`) so it never competes with the app's Groq/Gemini quota — and many metrics (retrieval, SQL, routing, PII scan) need no LLM at all.
 
 > Security: the LangSmith API key is a secret — `.env` only, never committed. If a key is ever exposed (e.g. pasted in chat), rotate it in LangSmith → Settings → API Keys.

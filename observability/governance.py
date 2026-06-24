@@ -18,7 +18,7 @@ import os
 from .tracing import get_client, tracing_on
 
 REVIEW_QUEUE = os.getenv("LANGSMITH_REVIEW_QUEUE", "fdm-review")
-LOW_SCORE = 0.6   # verdict score below this -> human review
+LOW_SCORE = 2   # Verdict.score is 1-5 (1=poor); <= this -> route to human review
 
 _queue_id = None
 
@@ -58,7 +58,7 @@ def review_reason(state) -> str | None:
     score = verdict.get("score")
     if state.get("verifier_exhausted"):
         return "verifier_exhausted"
-    if score is not None and score < LOW_SCORE:
+    if score is not None and score <= LOW_SCORE:
         return f"low_verdict_score={score}"
     if (state.get("action_result") or {}).get("escalated"):
         return "supervisor_escalation"

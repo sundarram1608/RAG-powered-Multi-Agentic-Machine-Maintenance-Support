@@ -1,7 +1,7 @@
 """
 run_eval.py — Phase 5c runner. Binds each target to its uploaded LangSmith dataset,
 runs the evaluators, and emits: a LangSmith Experiment per dataset, a colour-coded
-Excel workbook (eval/results/eval_<ts>.xlsx), and a markdown summary.
+Excel workbook (eval/results/eval_<ts>.xlsx, with a Summary sheet), and a console table.
 
     python eval/run_eval.py                         # all 6 datasets (default)
     python eval/run_eval.py --dataset routing       # one dataset (substring match)

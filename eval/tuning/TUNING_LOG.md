@@ -17,6 +17,7 @@ audit trail of *why each dial is set where it is*.
 | `RERANK_MAX_LENGTH` | 512 | `rag/reranker_loader.py` |
 | `MAX_DIAGNOSIS_REQUERIES` | 3 | `agents/config.py` |
 | `VERIFY_MAX_ATTEMPTS` | 3 | `agents/config.py` |
+| `ANALYTICS_MAX_ATTEMPTS` | 3 | `agents/config.py` |
 
 ## Changes
 | Date | Dial | Old → New | Metric (before → after) | Sweep | Result file |
@@ -36,13 +37,17 @@ audit trail of *why each dial is set where it is*.
 
 ## Findings (observations, not dial changes)
 - **Reranker earns its keep on *ranking*, not recall.** rerank ON lifts MRR 0.48→0.55
-  and nDCG 0.80→0.88 (right page ranked higher), but recall@k is flat at 0.60 across
-  all configs — the reranker only reorders the fetched candidates, it can't recover a
-  page that was never retrieved.
+  and nDCG 0.80→0.88 (right page ranked higher), but recall@k is **flat** across all
+  configs — the reranker only reorders the fetched candidates, it can't recover a page
+  that was never retrieved.
+  > Note: the sweep measured recall ≈0.60 on the retrieval_labels revision at sweep
+  > time; the current blessed baseline (`versioning_and_ci/baseline.json`) is
+  > `recall@k = 0.5` after the page labels were tightened. Exact recall is
+  > label-revision-dependent; the *finding* (flat recall, ranking lift) holds either way.
 - **`RERANK_CANDIDATES=8` is optimal** on this set; 12 and 20 don't improve any metric
   and add latency. Kept at 8.
 - **CPU rerank latency ≈ 14s/query** (1.6s → 15.8s). Acceptable for eval; for production
   use a GPU or a hosted rerank API.
-- **Recall ceiling (0.60).** ~40% of queries never surface a labelled page even at 20
+- **Recall ceiling (~0.5).** ~half of queries never surface a labelled page even at 20
   candidates → a retrieval-recall gap (chunking / embeddings / `k`), out of scope for
   reranker tuning. Candidate for deeper RAG work.

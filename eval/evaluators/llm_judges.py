@@ -1,6 +1,6 @@
 """
 llm_judges.py — LLM-as-judge graders via openevals, bound to the eval judge
-(OpenRouter / DeepSeek). Faithfulness (groundedness) + answer relevance for the
+(OpenRouter, independent family — see eval_llm.py). Faithfulness (groundedness) + answer relevance for the
 troubleshoot diagnosis. Each returns {"key","score" (0-1),"comment"}; skipped cases
 return score=None.
 """

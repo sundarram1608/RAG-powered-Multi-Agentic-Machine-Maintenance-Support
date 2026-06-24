@@ -1,12 +1,17 @@
 """
 observability — Phase 5a tracing layer (LangSmith).
 
-Public API (used by agents/api.py):
+Public API:
+    # tracing (agents/api.py)
     make_config(thread_id, user_id, message, *, turn_id, run_name, base) -> (config, run_id, metadata)
-    enrich_run(run_id, base_metadata, state) -> None
+    enrich_run(run_id, base_metadata, state) -> None   # also auto-flags risky runs (5f)
     new_turn_id() -> str
     tracing_on() -> bool
     get_client() -> langsmith.Client (PII-masking)
+    # governance hooks (5f)
+    log_feedback(run_id, score, comment) -> bool       # UI thumbs up/down
+    flag_for_review(run_id, reason) -> bool            # add to the review annotation queue
+    review_reason(state) -> str | None                 # routing criteria
 """
 
 from .governance import flag_for_review, log_feedback, review_reason

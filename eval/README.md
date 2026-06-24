@@ -200,15 +200,14 @@ Yes — there's a concrete, openable artifact. After `run_eval.py`:
   *routing accuracy 0.92*).
   - Click any row → the full trace for that example.
 - **A comparison view** — select two Experiments → per-example diffs, regressions in red.
-- **A local summary** — `run_eval.py` also prints a console table and writes a
-markdown/JSON summary under `eval/results/`, so you get scores even offline.
+- **A console table** — `run_eval.py` prints per-dataset pass/fail to stdout as it runs.
 - **An Excel workbook** — `eval/results/eval_<timestamp>.xlsx` (openpyxl), the
-reviewer-friendly view (see below).
-- **A CI verdict (5e)** — `ci_gate.py` reads the aggregates against thresholds and exits
+reviewer-friendly view with a Summary sheet (see below).
+- **A CI verdict (5e)** — `ci_gate.py` reads the aggregates against the baseline and exits
 non-zero on a regression (for pre-merge gating).
 
 So performance is visible four ways: the **LangSmith Experiment UI** (richest), an
-**Excel workbook**, a **local markdown/JSON summary**, and a **pass/fail CI exit code**.
+**Excel workbook**, the **console table**, and a **pass/fail CI exit code**.
 
 ### 5.1 The Excel results workbook
 
@@ -369,8 +368,9 @@ eval/
 
 - **Quota:** datasets are small; the only LLM-graded set (`troubleshoot_cases`) is ~15.
 The deterministic sets (retrieval/SQL/routing/safety) need no judge.
-- **Eval judge (5c):** runs on a **separate** provider (OpenRouter + DeepSeek,
-`OPENROUTER_API_KEY`) so it never competes with the app's Groq/Gemini quota.
+- **Eval judge (5c):** runs on a **separate** provider (OpenRouter, default
+`qwen/qwen3-next-80b-a3b-instruct:free`; `OPENROUTER_API_KEY`) so it never competes
+with the app's Groq/Gemini quota. (See the Eval-judge note at the top.)
 - **Provenance:** troubleshoot/retrieval rows cite manual pages → auditable.
 - **Versioning:** JSONL in git + LangSmith dataset versions; experiments pin a version.
 - **Anchoring:** SQL gold answers assume `REFERENCE_TODAY = 2026-06-16`.
