@@ -6,8 +6,9 @@ datasets (Phase 5b) and the evaluators + runner that grade the agents against th
 knowledge base **read-only** to derive ground truth, and produces measurable scores
 you can open and compare in LangSmith.
 
-> Status: **Phase 5b (datasets) — in progress.** 5c (evaluators) and 5e (CI gate)
-> add `evaluators/`, `run_eval.py`, `ci_gate.py`.
+> Status: **Phase 5b (datasets) ✅** — 6 datasets (100 examples) authored, validated,
+> SQL gold answers verified against the DB. 5c (evaluators + `run_eval.py` + the Excel
+> workbook) and 5e (`ci_gate.py`) come next.
 
 ---
 
@@ -182,11 +183,33 @@ Yes — there's a concrete, openable artifact. After `run_eval.py`:
 - **A comparison view** — select two Experiments → per-example diffs, regressions in red.
 - **A local summary** — `run_eval.py` also prints a console table and writes a
   markdown/JSON summary under `eval/results/`, so you get scores even offline.
+- **An Excel workbook** — `eval/results/eval_<timestamp>.xlsx` (openpyxl), the
+  reviewer-friendly view (see below).
 - **A CI verdict (5e)** — `ci_gate.py` reads the aggregates against thresholds and exits
   non-zero on a regression (for pre-merge gating).
 
-So performance is visible three ways: the **LangSmith Experiment UI** (richest), a
-**local summary file**, and a **pass/fail CI exit code**.
+So performance is visible four ways: the **LangSmith Experiment UI** (richest), an
+**Excel workbook**, a **local markdown/JSON summary**, and a **pass/fail CI exit code**.
+
+### 5.1 The Excel results workbook
+`run_eval.py` (5c) writes an `.xlsx` with **one sheet per dataset** plus a **Summary**
+sheet. Each dataset sheet has one row per example with these columns:
+
+| Column | Meaning |
+|---|---|
+| `case_id` | the example id (e.g. `ts_bed_adhesion_m03`) |
+| `input` | the question / symptom / utterance sent to the agent |
+| `expected` | the reference (themes, gold answer, intent, expected pages, …) |
+| `agent_output` | what the agent actually produced |
+| `correct` | right / wrong (the evaluator's judgement vs the reference) |
+| `result` | **PASS / FAIL** (against the metric's threshold) |
+| `score` | numeric score (e.g. faithfulness 0.0–1.0, precision@k) |
+| `comments` | why it failed / notes (e.g. "hallucinated part not in manual", "missed page 51") |
+
+The **Summary** sheet aggregates per dataset/metric: counts of PASS/FAIL, mean score,
+and the overall pass rate — so you can open one file and see exactly *what was asked,
+what the agent said, whether it's right, pass/fail, and why*. Rows are colour-coded
+(PASS green / FAIL red) for a quick scan.
 
 ---
 
@@ -205,9 +228,15 @@ So performance is visible three ways: the **LangSmith Experiment UI** (richest),
 ## 7. Build scripts (`eval/build/`)
 | Script | Does |
 |---|---|
-| `validate_datasets.py` | schema-validate every JSONL row + referential checks: `machine_id`/`mvc_code` exist in the DB, cited pages within the PDF, `gold_sql` parses + is read-only |
-| `derive_sql_expectations.py` | run/verify each `gold_sql` against the live DB to confirm the expected answer (keeps `sql_cases` honest) |
-| `upload_datasets.py` | idempotent push of local JSONL → LangSmith datasets (create-or-update, versioned) |
+| `inspect_corpus.py` | derive honest page citations — scans the indexed chunk **text** in Chroma by keyword (no embedder, no PDF scan) and prints `(source_file, page range, snippet)`; used to label `retrieval_labels` + `troubleshoot_cases` cited pages |
+| `validate_datasets.py` | schema-validate every JSONL row + referential checks: `machine_id`/`mvc_code` exist in the DB, cited pages within the document's page count, routing/manage enums, `gold_sql` parses + is read-only |
+| `derive_sql_expectations.py` | run/verify each `gold_sql` against the live DB to confirm the expected answer (keeps `sql_cases` honest; anchored to `2026-06-16`) |
+| `upload_datasets.py` | idempotent push of local JSONL → LangSmith datasets (replace-on-reupload); `--dry-run` to preview |
+
+> **Methodology note (provenance):** `retrieval_labels` and `troubleshoot_cases` page
+> ranges are derived from the **real indexed chunk text** via `inspect_corpus.py`
+> (keyword match) and curated to content pages — not invented, and not taken from the
+> retriever's ranking (which would be circular for the retrieval metric).
 
 ---
 
@@ -225,12 +254,13 @@ eval/
     manage_cases.jsonl
     schemas.py                   # Pydantic schema per example type
   build/
+    inspect_corpus.py            # derive page citations from indexed chunk text
     validate_datasets.py
     derive_sql_expectations.py
     upload_datasets.py
-  results/                       # 5c — local eval summaries (markdown/JSON)
+  results/                       # eval outputs: eval_<ts>.xlsx + markdown/JSON (5c)
   evaluators/                    # 5c — the graders
-  run_eval.py                    # 5c — bind target + evaluators -> Experiment
+  run_eval.py                    # 5c — bind target + evaluators -> Experiment + Excel
   ci_gate.py                     # 5e — thresholds -> pass/fail exit
 ```
 

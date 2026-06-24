@@ -1,0 +1,25 @@
+{"id": "route_ts_bed", "inputs": {"utterance": "M01's bed won't heat up"}, "reference": {"intent": "troubleshoot", "machine_id": "M01"}, "metadata": {"clear": true}}
+{"id": "route_ts_clog", "inputs": {"utterance": "the nozzle on M03 is clogged and nothing extrudes"}, "reference": {"intent": "troubleshoot", "machine_id": "M03"}, "metadata": {"clear": true}}
+{"id": "route_ts_no_machine", "inputs": {"utterance": "my prints keep warping at the corners, how do I fix it?"}, "reference": {"intent": "troubleshoot"}, "metadata": {"clear": true, "machine_missing": true}}
+{"id": "route_an_open", "inputs": {"utterance": "how many incidents are still open?"}, "reference": {"intent": "analytics"}, "metadata": {"clear": true}}
+{"id": "route_an_overdue", "inputs": {"utterance": "which machines are overdue for maintenance?"}, "reference": {"intent": "analytics"}, "metadata": {"clear": true}}
+{"id": "route_an_stock", "inputs": {"utterance": "are we low on any spare parts?"}, "reference": {"intent": "analytics"}, "metadata": {"clear": true}}
+{"id": "route_an_history", "inputs": {"utterance": "how many incidents has M05 had this year?"}, "reference": {"intent": "analytics"}, "metadata": {"clear": true}}
+{"id": "route_mg_close", "inputs": {"utterance": "close incident inc_22, I replaced the thermistor"}, "reference": {"intent": "manage_incident"}, "metadata": {"clear": true}}
+{"id": "route_mg_assign", "inputs": {"utterance": "assign technician E11 to incident inc_23"}, "reference": {"intent": "manage_incident"}, "metadata": {"clear": true}}
+{"id": "route_mg_update", "inputs": {"utterance": "add a note to inc_24 that the parts are on order"}, "reference": {"intent": "manage_incident"}, "metadata": {"clear": true}}
+{"id": "route_gen_capability", "inputs": {"utterance": "what can you help me with?"}, "reference": {"intent": "general"}, "metadata": {"clear": true}}
+{"id": "route_gen_greeting", "inputs": {"utterance": "hi there"}, "reference": {"intent": "general"}, "metadata": {"clear": true}}
+{"id": "route_gen_howto", "inputs": {"utterance": "what kinds of machines do you support?"}, "reference": {"intent": "general"}, "metadata": {"clear": true}}
+{"id": "route_boundary_log_noise", "inputs": {"utterance": "M04 is making a grinding noise, can you look into it and log it"}, "reference": {"intent": "troubleshoot", "machine_id": "M04"}, "metadata": {"boundary": true, "note": "diagnose first; logging happens via the troubleshoot action path"}}
+{"id": "route_boundary_known_incident", "inputs": {"utterance": "what's the status of incident inc_24?"}, "reference": {"intent": "analytics"}, "metadata": {"boundary": true}}
+{"id": "route_ts_adhesion", "inputs": {"utterance": "first layer won't stick on M07"}, "reference": {"intent": "troubleshoot", "machine_id": "M07"}, "metadata": {"clear": true}}
+{"id": "route_an_count_machines", "inputs": {"utterance": "how many machines are under maintenance right now?"}, "reference": {"intent": "analytics"}, "metadata": {"clear": true}}
+{"id": "route_mg_reassign", "inputs": {"utterance": "reassign inc_25 to a different technician"}, "reference": {"intent": "manage_incident"}, "metadata": {"clear": true}}
+{"id": "route_ts_fumes", "inputs": {"utterance": "M05 is giving off a strong smell when printing ABS"}, "reference": {"intent": "troubleshoot", "machine_id": "M05"}, "metadata": {"clear": true}}
+{"id": "route_an_inventory_mvc", "inputs": {"utterance": "what parts do we stock for the TAZ 6?"}, "reference": {"intent": "analytics"}, "metadata": {"clear": true}}
+{"id": "route_gen_thanks", "inputs": {"utterance": "thanks, that's all"}, "reference": {"intent": "general"}, "metadata": {"clear": true}}
+{"id": "route_ts_layer_shift", "inputs": {"utterance": "layers are shifting on M08 halfway through prints"}, "reference": {"intent": "troubleshoot", "machine_id": "M08"}, "metadata": {"clear": true}}
+{"id": "route_an_which_open", "inputs": {"utterance": "which machines currently have open incidents?"}, "reference": {"intent": "analytics"}, "metadata": {"clear": true}}
+{"id": "route_mg_comment_only", "inputs": {"utterance": "update incident inc_22 comments to say waiting on customer"}, "reference": {"intent": "manage_incident"}, "metadata": {"clear": true}}
+{"id": "route_ts_extruder", "inputs": {"utterance": "the extruder on M01 is clicking and skipping"}, "reference": {"intent": "troubleshoot", "machine_id": "M01"}, "metadata": {"clear": true}}
