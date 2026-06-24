@@ -213,14 +213,14 @@ sheet. Each dataset sheet has one row per example with these columns:
 | `input` | the question / symptom / utterance sent to the agent |
 | `expected` | the reference (themes, gold answer, intent, expected pages, …) |
 | `agent_output` | what the agent actually produced |
-| `correct` | right / wrong (the evaluator's judgement vs the reference) |
-| `result` | **PASS / FAIL** (against the metric's threshold) |
-| `score` | numeric score (e.g. faithfulness 0.0–1.0, precision@k) |
-| `comments` | why it failed / notes (e.g. "hallucinated part not in manual", "missed page 51") |
+| `scores` | per-metric scores, e.g. `faithfulness=0.82; answer_relevance=0.90` |
+| `correct` | right / wrong (vs the reference) |
+| `result` | **PASS / FAIL** — every scored metric ≥ its threshold (`n/a` if nothing scored) |
+| `comments` | per-metric notes / why it failed (e.g. "got analytics, want manage_incident") |
 
-The **Summary** sheet aggregates per dataset/metric: counts of PASS/FAIL, mean score,
-and the overall pass rate — so you can open one file and see exactly *what was asked,
-what the agent said, whether it's right, pass/fail, and why*. Rows are colour-coded
+The **Summary** sheet has one row per dataset — `dataset · examples · pass · fail ·
+n/a · pass_rate` — so you can open one file and see exactly *what was asked, what the
+agent said, whether it's right, pass/fail, and why*. The `result` cell is colour-coded
 (PASS green / FAIL red) for a quick scan.
 
 ---
@@ -310,6 +310,10 @@ Excel written.
 eval/
   __init__.py
   README.md                      # this document
+  eval_llm.py                    # 5c — eval judge (OpenRouter; decoupled from app LLMs)
+  targets.py                     # 5c — per-dataset targets (call the existing nodes)
+  thresholds.py                  # 5c/5e — PASS/FAIL cutoffs per metric
+  run_eval.py                    # 5c — aevaluate -> Experiment + Excel + summary
   datasets/
     troubleshoot_cases.jsonl
     retrieval_labels.jsonl
@@ -317,16 +321,18 @@ eval/
     routing_cases.jsonl
     safety_redteam.jsonl
     manage_cases.jsonl
-    schemas.py                   # Pydantic schema per example type
+    schemas.py                   # Pydantic schema per example type + DATASETS registry
   build/
     inspect_corpus.py            # derive page citations from indexed chunk text
     validate_datasets.py
     derive_sql_expectations.py
     upload_datasets.py
-  results/                       # eval outputs: eval_<ts>.xlsx + markdown/JSON (5c)
-  evaluators/                    # 5c — the graders
-  run_eval.py                    # 5c — bind target + evaluators -> Experiment + Excel
-  ci_gate.py                     # 5e — thresholds -> pass/fail exit
+  evaluators/
+    __init__.py                  # EVALUATORS registry (dataset -> graders)
+    llm_judges.py                # faithfulness, answer_relevance (openevals)
+    deterministic.py             # gate, retrieval (p@k/recall@k/MRR/nDCG), sql, routing, safety, manage
+  results/                       # eval outputs: eval_<ts>.xlsx (git-ignored)
+  ci_gate.py                     # 5e — thresholds -> pass/fail exit (TODO)
 ```
 
 ---
