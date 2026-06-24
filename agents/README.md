@@ -97,6 +97,11 @@ resume_turn(thread_id, value)           -> Result   # answer a clarification / a
 | Judge fallback | **Qwen-3 32B (Groq)** | takes over when Gemini is unavailable; still a different family than the Llama reasoner |
 | Embeddings (RAG) | **BGE-M3 (local)** | free, no rate limits, deterministic |
 
+> These are the only models the **live agent** uses (Groq + Google). The offline
+> **eval judge** is separate — it lives in [`eval/`](../eval/) on **OpenRouter**
+> (`EVAL_JUDGE_MODEL`, e.g. Qwen-3) so grading never competes with the agent's quota
+> and stays an independent opinion. The agent never calls OpenRouter.
+
 Switching providers is a one-line change in `llms.py`. Keys: `GROQ_API_KEY`,
 `GOOGLE_API_KEY` in `.env` (both free).
 
