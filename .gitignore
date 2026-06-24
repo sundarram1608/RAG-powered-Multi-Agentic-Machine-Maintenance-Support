@@ -54,3 +54,6 @@ hf_cache/
 Thumbs.db
 .idea/
 .vscode/
+
+# Generated eval outputs
+eval/results/

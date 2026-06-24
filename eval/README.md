@@ -6,9 +6,21 @@ datasets (Phase 5b) and the evaluators + runner that grade the agents against th
 knowledge base **read-only** to derive ground truth, and produces measurable scores
 you can open and compare in LangSmith.
 
-> Status: **Phase 5b (datasets) ✅** — 6 datasets (100 examples) authored, validated,
-> SQL gold answers verified against the DB. 5c (evaluators + `run_eval.py` + the Excel
-> workbook) and 5e (`ci_gate.py`) come next.
+> Status: **5b (datasets) ✅ · 5c (evaluators + `run_eval.py` + Excel) ✅.** 6 datasets
+> (100 examples) validated, SQL gold answers DB-verified; the runner produces a
+> LangSmith Experiment + Excel per dataset (routing verified 25/25). 5e (`ci_gate.py`)
+> is next.
+
+### Eval judge note (free-tier reality)
+The judge is decoupled on **OpenRouter** (`EVAL_JUDGE_MODEL`). We picked an independent
+family (distinct from the Llama diagnoser + Gemini verifier). The intended
+`deepseek-*:free` was retired to paid, so the default is **`qwen/qwen3-next-80b-a3b-instruct:free`**
+(Qwen — still independent). **Free OpenRouter models are heavily rate-limited upstream**
+(`429`), so LLM-judge scores (faithfulness, answer relevance) may come back as
+`judge error` under load — the eval **degrades gracefully** (records the error, keeps
+going) rather than crashing. For reliable judge scores, set a cheap paid model:
+`EVAL_JUDGE_MODEL=deepseek/deepseek-chat-v3-0324`. The **deterministic** metrics
+(routing, SQL, retrieval, safety, manage, gate) need no judge and are unaffected.
 
 ---
 
@@ -265,6 +277,31 @@ that consumes the uploaded datasets — you do **not** need them to run 1–3.
 
 Current status: `validate_datasets.py` → **ALL VALID (100)**;
 `derive_sql_expectations.py` → **ALL GOLD ANSWERS VERIFIED**.
+
+### 7.2 How to run the evaluation (5c)
+
+After the datasets are uploaded (§7.1 step 3):
+```bash
+# troubleshoot + manage need the MCP HTTP server up; the others don't
+python mcp_server/server.py http        # separate terminal (for troubleshoot/manage)
+
+python eval/run_eval.py                  # all 6 datasets (default)
+python eval/run_eval.py --dataset routing   # one dataset (substring match) — fast, no server/judge
+```
+Each dataset → a **LangSmith Experiment** (URL printed) + a row block in
+`eval/results/eval_<ts>.xlsx`. Prereqs: `LANGSMITH_API_KEY`, `OPENROUTER_API_KEY`,
+`GROQ_API_KEY`, `GOOGLE_API_KEY` in `.env`. Server/quota per dataset:
+
+| Dataset | Needs HTTP server | LLMs used |
+|---|---|---|
+| routing, safety | no | Groq |
+| sql | no | Groq + Gemini (reviewer) |
+| retrieval | no | local embedder + reranker |
+| troubleshoot | **yes** | Groq + Gemini + eval judge (OpenRouter) |
+| manage | **yes** | Groq |
+
+Verified: `--dataset routing` → Experiment created, **25/25 PASS** (intent accuracy),
+Excel written.
 
 ---
 
