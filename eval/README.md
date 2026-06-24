@@ -238,6 +238,34 @@ what the agent said, whether it's right, pass/fail, and why*. Rows are colour-co
 > (keyword match) and curated to content pages — not invented, and not taken from the
 > retriever's ranking (which would be circular for the retrieval metric).
 
+### 7.1 How to build & validate (run now — this is 5b, *before* the evaluators)
+
+These run as part of **authoring/maintaining the datasets**, independent of 5c. Run
+them whenever you edit a `.jsonl`. Order:
+
+```bash
+# 0. (only when (re)authoring citations) inspect the corpus for a topic's real pages
+python eval/build/inspect_corpus.py "thermistor" MVC02      # or: no args -> topic sweep
+
+# 1. lint every dataset: schema + machine/mvc exist + page ranges + read-only gold SQL
+python eval/build/validate_datasets.py                      # exits non-zero on any issue
+
+# 2. verify the SQL gold answers actually compute against the live DB
+python eval/build/derive_sql_expectations.py                # exits non-zero if a gold answer is wrong
+
+# 3. (after you've reviewed the JSONL) push to LangSmith
+python eval/build/upload_datasets.py --dry-run              # preview counts
+python eval/build/upload_datasets.py                        # upload (needs LANGSMITH_API_KEY)
+```
+
+Prereqs: the **MySQL DB** must be up (steps 1–2 query it); **no MCP/LLM** needed.
+Step 3 needs `LANGSMITH_API_KEY` in `.env`. Steps 1–2 are also the right pre-commit
+check after editing any dataset. The **evaluators (5c)** are a *separate* later step
+that consumes the uploaded datasets — you do **not** need them to run 1–3.
+
+Current status: `validate_datasets.py` → **ALL VALID (100)**;
+`derive_sql_expectations.py` → **ALL GOLD ANSWERS VERIFIED**.
+
 ---
 
 ## 8. Directory structure
