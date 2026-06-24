@@ -203,6 +203,25 @@ governance control.
 > PII-leak checks) lives under **Evaluation** (`safety_redteam`); its *enforcement* (PII
 > masking, the input guard) lives under **Governance/Observability**.
 
+**Evaluations carried out — what, where to see them, and what they validate.** Each
+dataset is graded into a **LangSmith Experiment** (per-example drill-down) and a sheet
+in `eval/results/eval_<ts>.xlsx`; tuning sweeps write to `eval/results/tuning/`.
+
+| Evaluation | What it measures | Where to see the result | What it validates in the workflow |
+|---|---|---|---|
+| **Troubleshoot** (faithfulness*, answer-relevance*, needs-technician gate) | diagnosis grounded in retrieved context, answers the symptom, correct self-vs-technician gate | LangSmith `fdm-troubleshoot` + Excel `troubleshoot_cases` | Diagnosis → Verifier → `needs_technician` gate |
+| **Retrieval** (precision@k, recall@k, MRR, nDCG) | retriever surfaces the right manual pages | LangSmith `fdm-retrieval` + Excel `retrieval_labels` | RAG retriever (`rag/retriever.py`) feeding Diagnosis |
+| **Text-to-SQL** (rows-match, read-only, no-phone) | analytics SQL is correct, read-only, never touches `phone` | LangSmith `fdm-sql` + Excel `sql_cases` | Analytics generate → Reviewer → execute |
+| **Routing** (intent accuracy) | supervisor routes to the right branch | LangSmith `fdm-routing` + Excel `routing_cases` | Supervisor (+ Intake/Decider) |
+| **Safety** (guard-correct, no-PII-leak) | input guard refuses unsafe/PII/injection; no leak | LangSmith `fdm-safety` + Excel `safety_redteam` | Input guard + Output PII scrub |
+| **Manage incident** (action-correct) | resolver picks the right action / approval | LangSmith `fdm-manage` + Excel `manage_cases` | Manage-Incident resolver |
+| **Reranker sweep** (tuning) | does reranking help + best `RERANK_CANDIDATES` | `eval/results/tuning/reranker_sweep_*.xlsx` + `TUNING_LOG.md` | `RERANK_CANDIDATES` dial in `rag/retriever.py` |
+| **Verifier calibration** (tuning) | is the Verifier too strict / too lax | `eval/results/tuning/verifier_calibration_*.xlsx` | Verifier strictness / `VERIFY_MAX_ATTEMPTS` |
+| **Diagnosis sweep** (tuning) | do extra corrective-RAG retries pay off | `eval/results/tuning/diagnosis_sweep_*.xlsx` | `MAX_DIAGNOSIS_REQUERIES` dial |
+| **Regression gate** (CI) | blocking metrics vs blessed baseline | `ci_gate.py` exit 0/1 + console | guards changes to all of the above |
+
+<sub>\* faithfulness/answer-relevance use the free OpenRouter judge → may show `n/a` under rate-limits; they are **advisory** (never block the CI gate). All other metrics are deterministic.</sub>
+
 **Run order (fresh fork, after steps 0–4). Prereqs: `.env` has `GROQ_API_KEY`,
 `GOOGLE_API_KEY`, `LANGSMITH_API_KEY` (+ `OPENROUTER_API_KEY` for the eval judge); the DB
 is up; the RAG index is built.**
