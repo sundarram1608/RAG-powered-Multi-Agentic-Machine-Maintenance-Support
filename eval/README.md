@@ -3,10 +3,11 @@
 This folder holds the **offline evaluation** of the agent workflow: curated golden datasets and the evaluators + runner that grade the agents against them
 (Phase 5c–5e). It is **backstage** — it never changes runtime behaviour. It reads the knowledge base **read-only** to derive ground truth, and produces measurable scores you can open and compare in LangSmith.
 
-> Status: **5b (datasets) ✅ · 5c (evaluators + `run_eval.py` + Excel) ✅.** 6 datasets
-> (100 examples) validated, SQL gold answers DB-verified; the runner produces a
-> LangSmith Experiment + Excel per dataset (routing verified 25/25). 5e (`ci_gate.py`)
-> is next.
+> Status: **5b datasets ✅ · 5c evaluators+Excel ✅ · 5d tuning ✅ · 5e versioning+CI ✅.**
+> 6 datasets (100 examples) validated; runner produces a LangSmith Experiment + Excel
+> per dataset; tuning sweeps in `tuning/`; version-stamping + regression gate in
+> `versioning_and_ci/` (4 valid baselines blessed; safety/manage deferred until a
+> clean re-run).
 
 ### Eval judge note (free-tier reality)
 
@@ -353,8 +354,13 @@ eval/
     verifier_calibration.py      # inline verifier vs offline judge -> confusion + recommendation
     diagnosis_sweep.py           # corrective-RAG requery depth vs faithfulness/cost
     TUNING_LOG.md                # audit trail of every applied dial change
+  versioning_and_ci/             # 5e — version-stamping + regression gate (dev/CI only)
+    version_manifest.py          # prompt/model/dial versions -> stamped on every experiment
+    ls_scores.py                 # read latest experiment scores from LangSmith (zero tokens)
+    baseline.json                # blessed reference scores (4 valid datasets; safety/manage later)
+    ci_gate.py                   # latest vs baseline ± tolerance -> exit 0/1; --bless to (re)write
+    compare_experiments.py       # diff two experiments / latest-vs-baseline
   results/                       # eval outputs: eval_<ts>.xlsx + tuning/*.xlsx (git-ignored)
-  ci_gate.py                     # 5e — thresholds -> pass/fail exit (TODO)
 ```
 
 ---
@@ -416,7 +422,39 @@ Tuning: `reranker_sweep` ✅ ran (rerank ON lifts MRR 0.48→0.55 / nDCG 0.80→
 
 **Operational lesson:** the full eval is too Groq-token-heavy for the 100k/day free cap in one sitting. Re-run the invalidated pieces (`--dataset safety`, `--dataset manage`, and the two tuning tools) **after the Groq daily reset**, spread out, or on the paid Dev tier. Artifacts: `eval/results/eval_full.xlsx` (+ the routing/troubleshoot/sql/retrieval sheets are the trustworthy ones).
 
-## 12. How the phases connect
+## 12. Versioning & CI (5e) — `eval/versioning_and_ci/`
+
+A **developer safety-net** — version-stamp every eval, compare runs, and fail CI on a
+real regression. **Dev/CI only — never runs in the live agent** (and no Prompt Hub:
+prompts stay local in git; we just log their versions).
+
+- **`version_manifest.py`** — collects prompt versions + model ids (incl. the eval
+  judge) + tuned dials into one dict; `run_eval.py` stamps it on **every** experiment's
+  metadata, so each score is attributable to an exact config.
+- **`ls_scores.py`** — reads the **latest** experiment's per-metric means from LangSmith
+  (aggregated over the run's root-run feedback). **Zero tokens** — no re-run.
+- **`baseline.json`** — the blessed "known-good" scores. Blessed now for the **4 valid**
+  datasets (routing `intent_correct`=1.0; sql `rows_match`=0.79/`readonly`=1.0/`no_phone`=1.0;
+  retrieval `recall@k`=0.5; troubleshoot `needs_technician_correct`=0.87). **safety/manage
+  deferred** (their last run was Groq-cap-tainted). Re-bless with `--bless`.
+- **`ci_gate.py`** — reads latest scores, compares **blocking** metrics vs baseline
+  (tolerance 0.05), prints **advisory** metrics, exits `0`/`1`.
+  - **Blocking** (reliable, deterministic): routing intent, sql rows/readonly/no-phone,
+    retrieval recall@k, troubleshoot `needs_technician`.
+  - **Advisory** (printed, never blocks): `faithfulness`, `answer_relevance` — the free
+    judge is flaky; promote to blocking once on a reliable judge.
+- **`compare_experiments.py`** — diff two experiments, or latest-vs-baseline.
+
+```bash
+python eval/versioning_and_ci/ci_gate.py            # gate vs baseline (exit 0/1)
+python eval/versioning_and_ci/ci_gate.py --bless    # (re)write baseline.json from latest valid runs
+python eval/versioning_and_ci/compare_experiments.py --baseline fdm-routing
+```
+Flow: `run_eval` stamps experiments → bless a baseline once → on a change, re-run the
+eval (you choose when, mindful of the Groq daily cap) → `ci_gate` reads the new scores
+and fails if a blocking metric regressed.
+
+## 13. How the phases connect
 
 5b produces the datasets. **5c** adds `evaluators/` + `run_eval.py` (binds the agent as
 the target, runs the graders, creates Experiments + Excel). **5d** (`tuning/`) tunes the

@@ -22,12 +22,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "eval"))
 sys.path.insert(0, str(ROOT / "eval" / "datasets"))
+sys.path.insert(0, str(ROOT / "eval" / "versioning_and_ci"))
 sys.path.insert(0, str(ROOT))
 
 from datasets.schemas import DATASETS
 from evaluators import EVALUATORS
 from targets import TARGETS
 from thresholds import threshold
+from version_manifest import get_manifest
 
 from langsmith import aevaluate
 import openpyxl
@@ -66,13 +68,14 @@ def _row_verdict(feedbacks):
     return "; ".join(scored), " | ".join(comments)[:500], passed
 
 
-async def run_dataset(fname, stamp):
+async def run_dataset(fname, stamp, manifest):
     ds_name = DATASETS[fname][1]
     target, evs = TARGETS[fname], EVALUATORS[fname]
     print(f"\n=== {ds_name} ===")
     results = await aevaluate(
         target, data=ds_name, evaluators=evs,
-        experiment_prefix=f"{fname.split('.')[0]}-{stamp}", max_concurrency=3)
+        experiment_prefix=f"{fname.split('.')[0]}-{stamp}", max_concurrency=3,
+        metadata=manifest)   # stamp the experiment with prompt/model/dial versions (5e)
     rows = []
     async for r in results:
         run, ex = r["run"], r["example"]
@@ -133,10 +136,11 @@ async def main():
         print(f"no dataset matches '{args.dataset}'. options: {list(DATASETS)}"); return
 
     RESULTS.mkdir(exist_ok=True)
+    manifest = get_manifest()   # prompt/model/dial versions stamped on every experiment (5e)
     by_ds = {}
     for fname in selected:
         try:
-            by_ds[fname] = await run_dataset(fname, stamp)
+            by_ds[fname] = await run_dataset(fname, stamp, manifest)
         except Exception as e:
             print(f"  !! {fname} failed: {str(e)[:200]}")
     if not by_ds:

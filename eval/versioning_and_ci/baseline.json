@@ -1,0 +1,64 @@
+{
+  "blessed_at": "2026-06-24T10:27:11",
+  "tolerance": 0.05,
+  "manifest": {
+    "models": {
+      "reasoning": "llama-3.3-70b-versatile",
+      "judge": "gemini-2.5-flash-lite",
+      "judge_fallback": "qwen/qwen3-32b",
+      "eval_judge": "qwen/qwen3-next-80b-a3b-instruct:free"
+    },
+    "dials": {
+      "RERANK_CANDIDATES": 8,
+      "MANUAL_K": 5,
+      "SAFETY_K": 2,
+      "MAX_DIAGNOSIS_REQUERIES": 3,
+      "VERIFY_MAX_ATTEMPTS": 3,
+      "ANALYTICS_MAX_ATTEMPTS": 3
+    },
+    "prompts": {
+      "analytics": "1.0.0",
+      "decider": "1.0.0",
+      "diagnosis": "1.0.0",
+      "input": "1.0.0",
+      "intake": "1.0.0",
+      "manage_incident": "1.0.0",
+      "output": "1.0.0",
+      "supervisor": "1.0.0",
+      "text_to_sql_reviewer": "1.0.0",
+      "verifier": "1.0.0"
+    }
+  },
+  "datasets": {
+    "fdm-routing": {
+      "experiment": "routing_cases-full-18dbf1cd",
+      "n": 25,
+      "scores": {
+        "intent_correct": 1.0
+      }
+    },
+    "fdm-sql": {
+      "experiment": "sql_cases-full-2bbef0ea",
+      "n": 15,
+      "scores": {
+        "sql_rows_match": 0.7857142857142857,
+        "sql_readonly": 1.0,
+        "sql_no_phone": 1.0
+      }
+    },
+    "fdm-retrieval": {
+      "experiment": "retrieval_labels-full-d4e0b56f",
+      "n": 10,
+      "scores": {
+        "recall@k": 0.5
+      }
+    },
+    "fdm-troubleshoot": {
+      "experiment": "troubleshoot_cases-full-97e96123",
+      "n": 15,
+      "scores": {
+        "needs_technician_correct": 0.8666666666666667
+      }
+    }
+  }
+}
