@@ -30,12 +30,16 @@ import observability as obs
 from langgraph.types import Command
 
 
-def _interpret(result: dict, turn_id: str) -> dict:
+def _interpret(result: dict, turn_id: str, run_id) -> dict:
+    # run_id lets the UI attach feedback later via observability.log_feedback(run_id, score)
+    rid = str(run_id) if run_id else None
     interrupts = result.get("__interrupt__")
     if interrupts:
         payload = interrupts[0].value
-        return {"kind": payload.get("type", "needs_input"), "payload": payload, "turn_id": turn_id}
-    return {"kind": "answer", "content": result.get("final_response"), "turn_id": turn_id}
+        return {"kind": payload.get("type", "needs_input"), "payload": payload,
+                "turn_id": turn_id, "run_id": rid}
+    return {"kind": "answer", "content": result.get("final_response"),
+            "turn_id": turn_id, "run_id": rid}
 
 
 async def start_turn(thread_id: str, user_id: str, message: str, turn_id: str = None) -> dict:
@@ -45,7 +49,7 @@ async def start_turn(thread_id: str, user_id: str, message: str, turn_id: str = 
     result = await app_graph.ainvoke(
         {"user_input": message, "current_user_id": user_id}, cfg)
     obs.enrich_run(run_id, meta, result)
-    return _interpret(result, turn_id)
+    return _interpret(result, turn_id, run_id)
 
 
 async def resume_turn(thread_id: str, value, turn_id: str = None, user_id: str = None) -> dict:
@@ -54,4 +58,4 @@ async def resume_turn(thread_id: str, value, turn_id: str = None, user_id: str =
         thread_id, user_id, str(value), turn_id=turn_id, run_name="turn:resume")
     result = await app_graph.ainvoke(Command(resume=value), cfg)
     obs.enrich_run(run_id, meta, result)
-    return _interpret(result, turn_id)
+    return _interpret(result, turn_id, run_id)

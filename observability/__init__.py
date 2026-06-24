@@ -9,6 +9,7 @@ Public API (used by agents/api.py):
     get_client() -> langsmith.Client (PII-masking)
 """
 
+from .governance import flag_for_review, log_feedback, review_reason
 from .tracing import (
     PROJECT,
     enrich_run,
@@ -21,8 +22,11 @@ from .tracing import (
 __all__ = [
     "PROJECT",
     "enrich_run",
+    "flag_for_review",
     "get_client",
+    "log_feedback",
     "make_config",
     "new_turn_id",
+    "review_reason",
     "tracing_on",
 ]

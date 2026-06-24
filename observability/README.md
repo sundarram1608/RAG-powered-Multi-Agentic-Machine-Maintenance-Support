@@ -169,20 +169,55 @@ Importing this module **disables the env auto-tracer** and attaches an explicit,
 
 ---
 
-## 9. Files
+## 9. Governance hooks (Phase 5f)
+
+Three free governance hooks (all no-ops unless `LANGSMITH_TRACING=true`):
+
+1. **PII masking** — done (see §5): the redactor strips phone/email before any upload.
+2. **Feedback capture** — `log_feedback(run_id, score, comment)` records a human
+   thumbs-up/down on a turn's trace (`score`: `1`=👍, `0`=👎).
+3. **Review queue** — `flag_for_review(run_id, reason)` adds a run to a LangSmith
+   **annotation queue** (`fdm-review`, auto-created) for human review.
+
+### How they're used in real time
+
+**Feedback (from the Phase 6 UI).** `api.start_turn/resume_turn` now return the
+`run_id`; the UI shows 👍/👎 and logs the click against that run:
+```python
+res = await start_turn(thread_id, user_id, msg)     # -> {"content", "run_id", ...}
+st.markdown(res["content"])
+if st.button("👍"): observability.log_feedback(res["run_id"], 1)
+if st.button("👎"): observability.log_feedback(res["run_id"], 0, comment=note)
+```
+The feedback lands on that exact trace in LangSmith — so you can later filter "all 👎
+turns" and turn them into new eval cases.
+
+**Review queue (automatic).** Every turn, `enrich_run` calls `review_reason(state)`;
+qualifying runs are auto-routed to the `fdm-review` queue. Current criteria:
+`verifier_exhausted` · `verdict_score < 0.6` · supervisor escalation · any
+`manage_incident` DB write. **No app code needed** — it happens on each traced turn.
+A reviewer then opens **LangSmith → Annotation Queues → `fdm-review`**, sees each
+flagged run (symptom, retrieved context, diagnosis, action), and labels it 👍/👎 +
+correction; those annotations become feedback you can mine for new dataset examples.
+(Tune the criteria in `governance.review_reason`; rename the queue via
+`LANGSMITH_REVIEW_QUEUE`.) Governance only — it routes production runs to humans, it
+**never changes the live agent's behaviour**.
+
+## 10. Files
 
 | File | Purpose |
 |---|---|
-| `tracing.py` | the layer: `make_config`, `enrich_run`, `new_turn_id`, `tracing_on`, `get_client`, PII redactor, masking tracer |
+| `tracing.py` | `make_config`, `enrich_run` (+ auto review-flag), `new_turn_id`, `tracing_on`, `get_client`, PII redactor, masking tracer |
+| `governance.py` | 5f hooks: `log_feedback`, `flag_for_review`, `review_reason` |
 | `__init__.py` | public exports |
 | `trace_smoke.py` | one-shot verification: a traced turn → run URL + PII-mask assertion |
 | `README.md` | this document |
 
-Consumed by `agents/api.py` (`start_turn` / `resume_turn`).
+Consumed by `agents/api.py` (`start_turn` / `resume_turn`, which return `run_id`).
 
 ---
 
-## 10. What's next
+## 11. What's next
 
 - **Evaluation, in `eval/`:** golden datasets + RAG groundedness (faithfulness, context precision/recall), retrieval metrics + reranker tuning, routing/SQL/structured-output validation, input-guard red-team + PII-leak checks, and a CI regression gate. The eval **judge** runs on a *separate* free provider (**OpenRouter + DeepSeek**, `OPENROUTER_API_KEY`) so it never competes with the app's Groq/Gemini quota — and many metrics (retrieval, SQL, routing, PII scan) need no LLM at all.
 

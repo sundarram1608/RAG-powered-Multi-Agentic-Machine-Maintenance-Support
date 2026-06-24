@@ -159,3 +159,10 @@ def enrich_run(run_id, base_metadata, state) -> None:
         get_client().update_run(run_id, extra={"metadata": merged})
     except Exception:
         pass  # observability must never break a turn
+    try:
+        from .governance import flag_for_review, review_reason   # lazy: avoids import cycle
+        reason = review_reason(state)
+        if reason:
+            flag_for_review(run_id, reason)
+    except Exception:
+        pass
