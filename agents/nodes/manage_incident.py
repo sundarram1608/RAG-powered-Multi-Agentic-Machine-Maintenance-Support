@@ -92,6 +92,16 @@ async def manage_resolve(state: dict) -> dict:
         match = _INC_RE.search(user_input)
         incident_id = match.group(0).lower() if match else None
     if not incident_id:
+        # "open / create / log / book a NEW incident" -> not a manage action (it's
+        # troubleshoot). Redirect instead of looping on "which incident?".
+        if re.search(r"\b(new|open|create|raise|log|file|start|book)\b[\w\s,]*\bincident\b",
+                     user_input, re.I):
+            plan = {"action": "unsupported", "incident_id": None,
+                    "plan_summary": "I can only act on an existing incident here. To open a new "
+                                    "one, just describe the fault (e.g. \"M03's bed won't heat\") and "
+                                    "I'll diagnose it and log the incident for you. To edit an existing "
+                                    "incident, give its id (e.g. inc_26)."}
+            return {"manage_plan": plan, "prompt_versions": versions}
         return _clarify({"action": None, "incident_id": None},
                         "Which incident? Please give its id, e.g. inc_26.", versions)
 

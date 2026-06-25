@@ -191,7 +191,7 @@ The plumbing every node stands on (no nodes yet):
 - **Output format** (Pydantic `Route` via `with_structured_output`) → writes state: `intent` (`"troubleshoot" | "analytics" | "manage_incident" | "general"`), `prompt_versions["supervisor"]`.
 - **Routing:** `troubleshoot` → **Intake** · `analytics` → **Analytics** · `manage_incident` → **Manage Incident** · `general` → **Output**.
 - **Edge cases:** READ data question → `analytics`, WRITE/action on a known record → `manage_incident`; a symptom that needs diagnosing → `troubleshoot` (even if "log it" is mentioned); capability/greeting → `general`; ambiguous-but-actionable → `troubleshoot` (Intake clarifies, avoiding dead-ends).
-- **Prompt:** `prompts/supervisor.py` · v1.0.0.
+- **Prompt:** `prompts/supervisor.py` · v1.1.0 (opening/"booking" a NEW incident routes to troubleshoot, not manage).
 
 ### 3. Analytics Agent (Text-to-SQL coder + executor) — `nodes/analytics.py`  ✅
 - **Purpose:** answer read-only analytics questions by generating SQL (grounded in the schema) and, after the Reviewer approves, executing it. Result summarization is the **Output** agent's job.
@@ -223,7 +223,7 @@ The plumbing every node stands on (no nodes yet):
 - **Availability rules live in the node** (not the prompt — the LLM has no live data): named-&-available → propose; named-unavailable **or** unnamed → present `list_available_technicians` and ask the manager to choose; the chosen tech is then booked. **Availability enforced** (no overload); **reassign auto-frees the prior slot** (`book_technician_slot`).
 - **Notifications:** close → operator; assign → technician **and** operator (`send_email`; `email_dry_run` flag for tests).
 - **Edge cases:** no/unknown incident id → clarify; **close requires a comment** → ask if missing (never invented); close an already-closed / assign to a closed incident → `unsupported`; reject at approval → no writes.
-- **Prompt:** `prompts/manage_incident.py` · v1.0.0.
+- **Prompt:** `prompts/manage_incident.py` · v1.1.0 (creating a new incident is unsupported here → redirect to troubleshoot).
 
 ### 6. Intake Agent — `nodes/intake.py`  ✅
 - **Purpose:** the troubleshoot entry point — ensure a **valid machine** + a **symptom** before diagnosis; hand `mvc_code` + `symptom` to Diagnosis.

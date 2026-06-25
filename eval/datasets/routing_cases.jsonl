@@ -23,3 +23,5 @@
 {"id": "route_an_which_open", "inputs": {"utterance": "which machines currently have open incidents?"}, "reference": {"intent": "analytics"}, "metadata": {"clear": true}}
 {"id": "route_mg_comment_only", "inputs": {"utterance": "update incident inc_22 comments to say waiting on customer"}, "reference": {"intent": "manage_incident"}, "metadata": {"clear": true}}
 {"id": "route_ts_extruder", "inputs": {"utterance": "the extruder on M01 is clicking and skipping"}, "reference": {"intent": "troubleshoot", "machine_id": "M01"}, "metadata": {"clear": true}}
+{"id": "route_open_incident_fault", "inputs": {"utterance": "can you open an incident for M03's hot bed not heating"}, "reference": {"intent": "troubleshoot", "machine_id": "M03"}, "metadata": {"boundary": true, "note": "opening a NEW incident for a fault -> troubleshoot (logs it), not manage"}}
+{"id": "route_book_incident", "inputs": {"utterance": "I'd like to book a new incident"}, "reference": {"intent": "troubleshoot"}, "metadata": {"boundary": true, "note": "creating an incident -> troubleshoot; intake will ask for machine + symptom"}}
