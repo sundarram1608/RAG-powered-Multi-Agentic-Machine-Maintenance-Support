@@ -43,8 +43,8 @@ def _friendly_error(exc: Exception) -> str:
     s = str(exc).lower()
     if any(h in s for h in _RATE_LIMIT_HINTS):
         return ("⚠️ I've hit the free-tier usage limit for the AI service right now, so I "
-                "can't finish that. Please wait a minute and try again — if it keeps "
-                "happening, the daily quota may be used up (it resets later).")
+                "can't finish that. The tier resets at midnight every day. Please wait "
+                "until reset and then try again")
     return "⚠️ Sorry — something went wrong on my side. Please try again in a moment."
 
 
