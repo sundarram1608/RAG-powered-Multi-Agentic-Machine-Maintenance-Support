@@ -1,104 +1,123 @@
 """
-Helper functions for the Streamlit app.
+app_utils.py — Streamlit UI helpers for the FDM maintenance assistant.
 
-Keeps main.py thin: session-state setup, chat rendering, and the bridge
-between the UI and the agentic backend live here. The backend call is a
-stub for now and will be replaced by the LangGraph graph invocation.
+Session state, chat-history rendering, and the turn/interrupt dispatch that bridges the
+UI to the agent backend. Text-only (no image/vision). Human-in-the-loop interrupts are
+surfaced as a clarification prompt (typed answer) or as buttons (decision / choice /
+approve), then resumed via backend.resume_turn.
 
-Messages support text and/or image attachments. Each message is:
-    {
-        "role": ROLE_USER | ROLE_ASSISTANT,
-        "content": str,            # may be empty if only an image was sent
-        "images": list[bytes],     # raw image bytes, for rendering + the vision agent
-    }
+Each message: {"role": "user"|"assistant", "content": str}.
 """
 
-from typing import List, Optional
+import sys
+import uuid
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import streamlit as st
 
-# Roles used in the chat history.
+import backend
+
 ROLE_USER = "user"
 ROLE_ASSISTANT = "assistant"
 
+# button-interrupts -> (label, resume-value) pairs
+_BUTTONS = {
+    "decision": [("🔧 I'll fix it myself", "self"), ("👷 Book a technician", "technician")],
+    "choice": [("✅ Complete & close", "complete"), ("👷 Book a technician", "technician")],
+    "approve": [("✅ Approve", "approve"), ("✖ Reject", "reject")],
+}
+
 
 def init_session_state() -> None:
-    """Initialise session-scoped state on first load."""
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+    st.session_state.setdefault("messages", [])
+    st.session_state.setdefault("thread_id", uuid.uuid4().hex)
+    st.session_state.setdefault("pending", None)   # active interrupt: {kind,payload,turn_id,run_id}
+    st.session_state.setdefault("user_id", None)
 
-    if "thread_id" not in st.session_state:
-        # One conversation thread per Streamlit session. Used later as the
-        # LangGraph checkpointer key so clarification turns share state.
-        st.session_state.thread_id = _new_thread_id()
+
+def reset_conversation() -> None:
+    st.session_state.messages = []
+    st.session_state.thread_id = uuid.uuid4().hex
+    st.session_state.pending = None
+
+
+@st.cache_data(show_spinner=False)
+def operators():
+    return backend.list_operators()
+
+
+def set_operator(user_id) -> None:
+    """Switch operator; a new operator starts a fresh conversation."""
+    if user_id != st.session_state.user_id:
+        st.session_state.user_id = user_id
+        reset_conversation()
 
 
 def render_chat_history() -> None:
-    """Render all messages stored in session state."""
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            _render_message(message)
+    for m in st.session_state.messages:
+        with st.chat_message(m["role"]):
+            st.markdown(m["content"])
 
 
-def handle_user_message(user_text: str, uploaded_files: Optional[List] = None) -> None:
-    """Append the user's message (text and/or images), get a reply, render both."""
-    # Read uploaded images into raw bytes so they survive reruns
-    # (UploadedFile streams are consumed once).
-    images = [f.getvalue() for f in (uploaded_files or [])]
+def _append(role, content) -> None:
+    st.session_state.messages.append({"role": role, "content": content})
 
-    # Ignore empty submissions (no text and no image).
-    if not user_text and not images:
+
+def _prompt_text(kind, payload) -> str:
+    if kind == "decision":
+        return payload.get("question") or "Would you like to fix it yourself, or book a technician?"
+    if kind == "choice":
+        return payload.get("guidance") or "How would you like to proceed?"
+    if kind == "approve":
+        return f"Please review and approve:\n\n> {payload.get('summary') or '(no summary)'}"
+    return payload.get("question") or "Could you clarify that?"   # clarify
+
+
+def _apply(res) -> None:
+    """Update state from a backend result: either a final answer or a new interrupt."""
+    if res["kind"] == "answer":
+        _append(ROLE_ASSISTANT, res.get("content") or "_(no response)_")
+        st.session_state.pending = None
+    else:
+        st.session_state.pending = {"kind": res["kind"], "payload": res.get("payload", {}),
+                                    "turn_id": res.get("turn_id"), "run_id": res.get("run_id")}
+        _append(ROLE_ASSISTANT, _prompt_text(res["kind"], res.get("payload", {})))
+
+
+def handle_user_message(text) -> None:
+    """A typed message: resume a clarification, or start a fresh turn. Rendered live;
+    persisted to history for subsequent reruns."""
+    text = (text or "").strip()
+    if not text:
         return
-
-    user_message = {"role": ROLE_USER, "content": user_text, "images": images}
-    st.session_state.messages.append(user_message)
+    pending = st.session_state.pending
+    _append(ROLE_USER, text)
     with st.chat_message(ROLE_USER):
-        _render_message(user_message)
-
-    # Get the assistant reply (stubbed for now).
+        st.markdown(text)
     with st.chat_message(ROLE_ASSISTANT):
-        with st.spinner("Thinking…"):
-            reply = run_agent(user_text, images)
-        st.markdown(reply)
-
-    st.session_state.messages.append(
-        {"role": ROLE_ASSISTANT, "content": reply, "images": []}
-    )
-
-
-def run_agent(user_text: str, images: Optional[List] = None) -> str:
-    """
-    Bridge to the agentic backend.
-
-    STUB: echoes the input. This will be replaced by a call into the
-    LangGraph graph (passing text + images + thread_id and streaming the
-    supervisor's response back). Images route to the vision agent.
-    """
-    image_note = (
-        f"\n\n🖼️ Received **{len(images)}** image(s) — these will go to the "
-        "vision agent once it's wired up."
-        if images
-        else ""
-    )
-    return (
-        "🧪 _Backend not wired up yet._\n\n"
-        f"You said: **{user_text or '(no text)'}**"
-        f"{image_note}\n\n"
-        "Once the LangGraph graph is connected, this will run the "
-        "input-guard → (vision) → diagnosis → tools flow and return a real answer."
-    )
+        with st.spinner("Working…"):
+            if pending and pending["kind"] == "clarify":
+                res = backend.resume_turn(st.session_state.thread_id, text,
+                                          pending["turn_id"], st.session_state.user_id)
+            else:
+                res = backend.start_turn(st.session_state.thread_id, st.session_state.user_id, text)
+        _apply(res)
+        st.markdown(st.session_state.messages[-1]["content"])
 
 
-def _render_message(message: dict) -> None:
-    """Render a single message's text and any attached images."""
-    if message.get("content"):
-        st.markdown(message["content"])
-    for image_bytes in message.get("images", []):
-        st.image(image_bytes, width=300)
-
-
-def _new_thread_id() -> str:
-    """Generate a unique conversation thread id."""
-    import uuid
-
-    return uuid.uuid4().hex
+def render_pending_controls() -> None:
+    """If a button-interrupt is pending, render its buttons; resume + rerun on click."""
+    pending = st.session_state.pending
+    if not pending or pending["kind"] not in _BUTTONS:
+        return
+    cols = st.columns(len(_BUTTONS[pending["kind"]]))
+    for col, (label, value) in zip(cols, _BUTTONS[pending["kind"]]):
+        if col.button(label, key=f"{pending['kind']}:{value}:{pending['turn_id']}", use_container_width=True):
+            _append(ROLE_USER, label)
+            with st.spinner("Working…"):
+                res = backend.resume_turn(st.session_state.thread_id, value,
+                                          pending["turn_id"], st.session_state.user_id)
+            _apply(res)
+            st.rerun()

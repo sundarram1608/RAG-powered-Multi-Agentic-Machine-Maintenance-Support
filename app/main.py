@@ -1,46 +1,66 @@
 """
-Streamlit entrypoint for the Preventive Maintenance Assistant.
+Streamlit entrypoint for the Agentic FDM Maintenance assistant (Phase 6a).
 
-Run with:
+Text-only chat over the LangGraph workflow (agents/api.py via app/backend.py), with a
+sidebar operator login and human-in-the-loop interrupts (clarify / decision / choice /
+approve). Streaming progress (6b) and feedback buttons (6c) come next.
+
+Run (HTTP MCP server must be up):
+    python mcp_server/server.py http        # separate terminal
     streamlit run app/main.py
-
-This is a skeleton. The chat UI is wired up here; the agentic backend
-(LangGraph graph) gets plugged in later via app_utils.
 """
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import streamlit as st
 
-from app_utils import init_session_state, render_chat_history, handle_user_message
+from app_utils import (
+    handle_user_message,
+    init_session_state,
+    operators,
+    render_chat_history,
+    render_pending_controls,
+    reset_conversation,
+    set_operator,
+)
 
 
 def main() -> None:
-    st.set_page_config(
-                        page_title="Preventive Maintenance Assistant",
-                        page_icon="🛠️",
-                        layout="wide",
-                    )
-
-    st.title("🛠️ Agentic Preventive Maintenance")
-    intro_text = f"""Hi, I'm your AI Preventive Maintenance Engineer.
-                    \nI can help you troubleshoot and maintain your equipment.
-                    \nI will be able to answer questions about your equipment and help you with your issues.
-                    """
-    st.info(intro_text)
-    # Initialise per-session state (chat history, thread id, etc.)
+    st.set_page_config(page_title="Agentic FDM Maintenance", page_icon="🛠️", layout="centered")
+    st.title("🛠️ Agentic FDM Maintenance")
     init_session_state()
 
-    # Render the conversation so far.
-    render_chat_history()
+    # --- sidebar: operator login + new conversation ---
+    with st.sidebar:
+        st.header("Operator")
+        ops = operators()
+        labels = [lbl for _, lbl in ops]
+        ids = [oid for oid, _ in ops]
+        choice = st.selectbox("Logged in as", labels, index=None,
+                              placeholder="Pick an operator", key="op_choice")
+        set_operator(ids[labels.index(choice)] if choice else None)
+        if st.button("🔄 New conversation", use_container_width=True):
+            reset_conversation()
+            st.rerun()
 
-    # Chat input — accepts text and/or an image attachment (for the vision agent).
-    submission = st.chat_input(
-        "Describe the issue, or attach a photo of the defect…",
-        accept_file=True,
-        file_type=["png", "jpg", "jpeg"],
-    )
-    if submission:
-        # `submission` is a ChatInputValue: .text (str) and .files (list of UploadedFile).
-        handle_user_message(submission.text, submission.files)
+    if not st.session_state.user_id:
+        st.info("👈 Pick an operator in the sidebar to start.")
+        st.stop()
+
+    st.caption("Ask about a machine fault, maintenance data, or an incident.")
+    render_chat_history()
+    render_pending_controls()
+
+    pending = st.session_state.pending
+    button_interrupt = bool(pending and pending["kind"] != "clarify")
+    placeholder = (pending["payload"].get("question") if (pending and pending["kind"] == "clarify")
+                   else "Describe the issue, ask a question, or manage an incident…")
+    prompt = st.chat_input(placeholder, disabled=button_interrupt)
+    if prompt:
+        handle_user_message(prompt)
 
 
 if __name__ == "__main__":
