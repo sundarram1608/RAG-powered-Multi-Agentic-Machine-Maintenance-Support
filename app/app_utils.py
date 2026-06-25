@@ -103,8 +103,10 @@ def handle_user_message(text) -> None:
                                           pending["turn_id"], st.session_state.user_id)
             else:
                 res = backend.start_turn(st.session_state.thread_id, st.session_state.user_id, text)
-        _apply(res)
-        st.markdown(st.session_state.messages[-1]["content"])
+    _apply(res)
+    # Re-render so the next interrupt's controls / chat-input placeholder reflect the
+    # updated state immediately (otherwise they lag one run -> "submit twice").
+    st.rerun()
 
 
 def render_pending_controls() -> None:
