@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # .../mcp_tools
 from _common import run_query
 
 
-def list_incidents(status: str = "open", employee_id: str = None) -> list:
+def list_incidents(status: str = "open", employee_id: str | None = None) -> list:
     """
     List incidents so a user can pick one to act on, newest-id last.
 

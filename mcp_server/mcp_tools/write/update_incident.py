@@ -15,7 +15,7 @@ from _common import run_query, run_write, REFERENCE_TODAY
 
 
 def update_incident(incident_id: str, technician_comments: str,
-                    close: bool = True, assignee_id: str = None) -> dict:
+                    close: bool = True, assignee_id: str | None = None) -> dict:
     """
     Update an OPEN incident's outcome — add the technician's comments and, when the
     work is done, close it. It can touch ONLY the outcome fields
