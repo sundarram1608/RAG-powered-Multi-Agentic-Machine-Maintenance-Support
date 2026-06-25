@@ -42,7 +42,7 @@ def supervisor_node(state: dict) -> dict:
         human += f"Recent conversation (for context only):\n{context}\n\n"
     human += f'Route this user message:\n\n"""\n{user_text}\n"""'
 
-    llm = get_reasoner().with_structured_output(Route)
+    llm = get_reasoner(structured=Route)
     result = llm.invoke([
         SystemMessage(content=SUPERVISOR_SYSTEM),
         HumanMessage(content=human),

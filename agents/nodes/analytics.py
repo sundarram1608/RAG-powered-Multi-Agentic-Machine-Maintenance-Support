@@ -54,7 +54,7 @@ def analytics_generate(state: dict) -> dict:
         human += (f"\n\nYour previous SQL was rejected:\n{prior.get('sql')}\n"
                   f"Fix these problems and try again: {critique}")
 
-    plan = get_reasoner().with_structured_output(SqlPlan).invoke(
+    plan = get_reasoner(structured=SqlPlan).invoke(
         [SystemMessage(content=system), HumanMessage(content=human)])
 
     versions = dict(state.get("prompt_versions", {}))

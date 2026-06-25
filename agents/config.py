@@ -35,6 +35,29 @@ REFERENCE_TODAY = date(2026, 6, 16)
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+# Optional SECONDARY keys (same provider). When set, llms.py fails over to them on a
+# rate-limit / quota / capacity error so a turn can still finish. NOTE: Groq's
+# free-tier token cap is per-ACCOUNT, so a second key from the same account shares
+# that cap — failover adds headroom only across separate accounts (or per-key limits).
+GROQ_API_KEY_2 = os.getenv("GROQ_API_KEY_2")
+GOOGLE_API_KEY_2 = os.getenv("GOOGLE_API_KEY_2")
+
+# Substrings that mark a provider "can't serve this now" error — a daily/rate cap
+# (429, quota) or transient capacity (503, overloaded). Used by api.py for the
+# user-facing message AND by llms.py to decide when to fail over to a backup key.
+# It deliberately does NOT match request/validation bugs (400, bad schema), so those
+# surface immediately instead of being silently retried on another key.
+RATE_LIMIT_HINTS = (
+    "rate limit", "ratelimit", "429", "resource_exhausted", "tokens per day",
+    "tokens per minute", "quota", "too many requests",
+    "over capacity", "503", "service unavailable", "overloaded",
+)
+
+
+def is_rate_limit_error(exc: BaseException) -> bool:
+    """True if `exc` looks like a quota/rate/capacity error (see RATE_LIMIT_HINTS)."""
+    s = str(exc).lower()
+    return any(h in s for h in RATE_LIMIT_HINTS)
 
 # ── MCP servers (the agents connect to BOTH at once) ──
 #   local_data : stdio  — auto-spawned; the 13 read/RAG/write tools

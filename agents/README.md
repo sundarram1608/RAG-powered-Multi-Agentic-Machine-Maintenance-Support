@@ -110,15 +110,33 @@ resume_turn(thread_id, value)           -> Result   # answer a clarification / a
 > and stays an independent opinion. The agent never calls OpenRouter.
 
 Switching providers is a one-line change in `llms.py`. Keys: `GROQ_API_KEY`,
-`GOOGLE_API_KEY` in `.env` (both free).
+`GOOGLE_API_KEY` in `.env` (both free); optional `GROQ_API_KEY_2` / `GOOGLE_API_KEY_2`
+add per-provider backup keys (see Resilience).
 
-**Resilience (free-tier reality).** Both models set `max_retries` (`config.LLM_MAX_RETRIES`)
-so the provider SDK rides out transient `503` (Groq over-capacity, Gemini "high
-demand") and transient `429`s with exponential backoff. The judge additionally uses
-`get_judge_structured()`, which keeps Gemini primary but **fails over to Qwen-3 on
-Groq** (`.with_fallbacks`) when Gemini is unavailable after retries — including a hard
-daily-quota `429` that retries can't clear. So a Gemini outage degrades the run, it
-doesn't break it.
+**Resilience (free-tier reality).** Three layers, innermost first:
+1. **Retries** — every model sets `max_retries` (`config.LLM_MAX_RETRIES`) so the
+   provider SDK rides out transient `503` (Groq over-capacity, Gemini "high demand")
+   and transient `429`s with exponential backoff.
+2. **Backup key (optional)** — if `GROQ_API_KEY_2` / `GOOGLE_API_KEY_2` is set, the
+   factories build a `_QuotaFailover` chain (`get_reasoner`, `get_judge`,
+   `get_judge_structured`): when the primary key returns a rate-limit / quota /
+   capacity error (`config.is_rate_limit_error`), the next key is tried. It does
+   **not** fail over on request/validation bugs (those surface immediately). With no
+   secondary key set, the factory returns the bare model — identical to before.
+   *(Groq's token cap is per-account, so a 2nd Groq key from the same account shares
+   that cap; real headroom needs a separate account.)*
+3. **Cross-family judge fallback** — `get_judge_structured()` keeps Gemini primary
+   but appends **Qwen-3 on Groq** to the chain, so a Gemini outage falls to a
+   different family (preserving the verifier's independence) rather than breaking the
+   run. Full order: Gemini key1 → key2 → Qwen-Groq key1 → key2 (whichever exist).
+
+Only when **every** configured key is exhausted does the error reach `api.py`, which
+shows the friendly "free-tier limit — resets at midnight" message.
+
+> Factory contract: keys are passed explicitly and bindings applied per key, so call
+> `get_reasoner(structured=Schema)` / `get_reasoner(tools=…)` rather than
+> `.with_structured_output(…)` / `.bind_tools(…)` on the returned object (those don't
+> exist on a failover wrapper).
 
 ---
 

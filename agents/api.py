@@ -32,17 +32,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))           # agents/ on 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))       # repo root -> observability
 from graph import app_graph
 
+import config
 import observability as obs
 from langgraph.types import Command
 from langchain_core.messages import HumanMessage
 
-_RATE_LIMIT_HINTS = ("rate limit", "ratelimit", "429", "resource_exhausted",
-                     "tokens per day", "tokens per minute", "quota", "over capacity")
-
 
 def _friendly_error(exc: Exception) -> str:
-    s = str(exc).lower()
-    if any(h in s for h in _RATE_LIMIT_HINTS):
+    # Only reached after llms.py has already tried every configured backup key.
+    if config.is_rate_limit_error(exc):
         return ("⚠️ I've hit the free-tier usage limit for the AI service right now, so I "
                 "can't finish that. The tier resets at midnight every day. Please wait "
                 "until reset and then try again")

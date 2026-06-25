@@ -169,7 +169,7 @@ async def manage_resolve(state: dict) -> dict:
     details = (f"incident_id={incident['incident_id']}, machine={incident['machine_id']}, "
                f"status={incident['status']}, current_assignee={incident.get('technician_id')}, "
                f"work_date={incident.get('work_date')}")
-    plan = get_reasoner().with_structured_output(ManagePlan).invoke([
+    plan = get_reasoner(structured=ManagePlan).invoke([
         SystemMessage(content=MANAGE_RESOLVE_SYSTEM),
         HumanMessage(content=f"User request: {user_input}\n\nIncident details: {details}"),
     ])

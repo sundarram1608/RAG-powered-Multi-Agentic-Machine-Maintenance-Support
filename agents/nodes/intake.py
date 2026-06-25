@@ -59,7 +59,7 @@ async def intake_node(state: dict) -> dict:
         human += (f"\n\nAlready gathered — machine_id: {carried_machine}, "
                   f"symptom: {carried_symptom}")
 
-    extracted = get_reasoner().with_structured_output(Intake).invoke([
+    extracted = get_reasoner(structured=Intake).invoke([
         SystemMessage(content=INTAKE_SYSTEM),
         HumanMessage(content=human),
     ])

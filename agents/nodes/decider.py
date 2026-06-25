@@ -36,7 +36,7 @@ def decider_question(diagnosis: dict) -> str:
 def decider_node(state: dict) -> dict:
     """Interpret the operator's reply into a Decision."""
     reply = state.get("user_input", "")
-    decision = get_reasoner().with_structured_output(Decision).invoke([
+    decision = get_reasoner(structured=Decision).invoke([
         SystemMessage(content=DECIDER_SYSTEM),
         HumanMessage(content=f"Operator's reply: {reply}"),
     ])

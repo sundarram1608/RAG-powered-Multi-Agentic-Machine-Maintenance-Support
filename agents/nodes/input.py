@@ -53,7 +53,7 @@ def input_node(state: dict) -> dict:
         human += f"Recent conversation (for context only):\n{context}\n\n"
     human += f'Screen this user message:\n\n"""\n{user_text}\n"""'
 
-    llm = get_reasoner().with_structured_output(GuardResult)
+    llm = get_reasoner(structured=GuardResult)
     result = llm.invoke([
         SystemMessage(content=INPUT_SYSTEM),
         HumanMessage(content=human),

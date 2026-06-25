@@ -96,7 +96,7 @@ if __name__ == "__main__":
         import llms
         from langchain_core.messages import HumanMessage, SystemMessage
 
-        llm = llms.get_reasoner().bind_tools(tools_for("intake", tools))
+        llm = llms.get_reasoner(tools=tools_for("intake", tools))
         reply = llm.invoke([
             SystemMessage(content="You validate machines for a maintenance agent. "
                                   "Use the get_machine tool to look one up."),

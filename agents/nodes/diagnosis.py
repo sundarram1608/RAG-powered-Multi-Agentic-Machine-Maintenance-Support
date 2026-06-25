@@ -74,7 +74,7 @@ def _synthesize(symptom, machine_id, mvc_code, manual, safety, db_facts,
     if prior_issues:
         human += ("\n\nA previous attempt was REJECTED by the verifier for these "
                   f"reasons — address them: {prior_issues}")
-    return get_reasoner().with_structured_output(Diagnosis).invoke([
+    return get_reasoner(structured=Diagnosis).invoke([
         SystemMessage(content=DIAGNOSIS_SYSTEM),
         HumanMessage(content=human),
     ])
