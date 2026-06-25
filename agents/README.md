@@ -41,7 +41,7 @@ human-in-the-loop before anything irreversible.
 | 2 | **Supervisor** | Llama | — | route: troubleshoot / analytics / manage_incident / general |
 | 3 | **Analytics** | Llama | `run_readonly_query` | coder: NL → read-only SQL; executor: run approved SQL |
 | 4 | **Text-to-SQL Reviewer** | **Gemini** | — | judge the SQL: grounded / relevant / safe; loop back if not |
-| 5 | **Manage Incident** | Llama | `get_incident`, `list_available_technicians`, `find_available_technician`, `book_technician_slot`, `update_incident`, `send_email` | direct action on a KNOWN incident (close, assign/reassign, update) |
+| 5 | **Manage Incident** | Llama | `get_incident`, `list_incidents`, `list_available_technicians`, `find_available_technician`, `book_technician_slot`, `update_incident`, `send_email` | direct action on a KNOWN incident (close, assign/reassign, update) |
 | 6 | **Intake** | Llama | `get_machine` | resolve & validate machine; clarify if needed |
 | 7 | **Diagnosis** | Llama | RAG + DB read tools | gather evidence (corrective-RAG) → root cause + fix |
 | 8 | **Verifier** | **Gemini** | — | judge groundedness/relevance/safety; loop back if weak |
@@ -120,10 +120,10 @@ doesn't break it.
 The agents connect to **both** MCP servers at once via
 `langchain-mcp-adapters`' `MultiServerMCPClient` (`mcp_client.py`):
 
-- **stdio** (`local_data`) — auto-spawned; the 13 read/RAG/write tools.
+- **stdio** (`local_data`) — auto-spawned; the 14 read/RAG/write tools.
 - **streamable-HTTP** (`services`, `127.0.0.1:8000`) — separate process; `run_readonly_query`, `send_email`.
 
-`get_all_tools()` returns the union (15 tools); `tools_for(agent, tools)` filters
+`get_all_tools()` returns the union (16 tools); `tools_for(agent, tools)` filters
 to each agent's allow-list (`config.AGENT_TOOLS`):
 
 | Agent | Tools |
@@ -132,7 +132,7 @@ to each agent's allow-list (`config.AGENT_TOOLS`):
 | analytics | `run_readonly_query` |
 | intake | `get_machine` |
 | diagnosis | `user_manual_retrieval`, `safety_retrieval`, `get_overdue_status`, `get_maintenance_history`, `get_incident_history`, `check_inventory` |
-| manage_incident | `get_incident`, `list_available_technicians`, `find_available_technician`, `book_technician_slot`, `update_incident`, `send_email` |
+| manage_incident | `get_incident`, `list_incidents`, `list_available_technicians`, `find_available_technician`, `book_technician_slot`, `update_incident`, `send_email` |
 | self_action | `user_manual_retrieval`, `safety_retrieval`, `create_incident`, `update_incident` |
 | technician_action | `find_available_technician`, `create_incident`, `book_technician_slot`, `update_incident`, `send_email` |
 
@@ -154,7 +154,7 @@ The plumbing every node stands on (no nodes yet):
 
 **Milestone test** (`python agents/mcp_client.py`, under a clearly-marked
 `MILESTONE TEST` header):
-- **Part 1 (no API key):** connect to both servers, list the 15 tools, print each agent's resolved allow-list.
+- **Part 1 (no API key):** connect to both servers, list the 16 tools, print each agent's resolved allow-list.
 - **Part 2 (needs `GROQ_API_KEY`):** bind `tools_for("intake")` to the reasoner and confirm it emits a `get_machine` tool call.
 
 ---
@@ -217,13 +217,14 @@ The plumbing every node stands on (no nodes yet):
 ### 5. Manage Incident Agent — `nodes/manage_incident.py`  ✅
 - **Purpose:** perform a **direct action on a KNOWN incident** (no diagnosis): **close** (mark complete), **assign/reassign** a technician, or **update_comment**. Two phases with an approval/clarification interrupt between.
 - **LLM:** **Groq Llama 3.3 70B** (`manage_resolve` planning only); `manage_execute` is mechanical (no LLM).
-- **Tools:** `get_incident`, `list_available_technicians`, `find_available_technician`, `book_technician_slot`, `update_incident`, `send_email`.
+- **Tools:** `get_incident`, `list_incidents`, `list_available_technicians`, `find_available_technician`, `book_technician_slot`, `update_incident`, `send_email`.
 - **Phases:** `manage_resolve` (resolve incident via `get_incident` → `ManagePlan`; for `assign`, resolve a technician from **live** availability) → approval/clarification interrupt → `manage_execute` (perform + notify).
 - **Input format** (state read): `user_input` (+ carried `manage_plan` on resume), `current_user_id`. **Output format** (Pydantic `ManagePlan`, enriched) → state `manage_plan`, `needs_clarification`/`clarification_question`, `requires_approval`; execute → `action_result`; tags `prompt_versions["manage_incident"]`.
 - **Availability rules live in the node** (not the prompt — the LLM has no live data): named-&-available → propose; named-unavailable **or** unnamed → present `list_available_technicians` and ask the manager to choose; the chosen tech is then booked. **Availability enforced** (no overload); **reassign auto-frees the prior slot** (`book_technician_slot`).
 - **Notifications:** close → operator; assign → technician **and** operator (`send_email`; `email_dry_run` flag for tests).
-- **Edge cases:** no/unknown incident id → clarify; **close requires a comment** → ask if missing (never invented); close an already-closed / assign to a closed incident → `unsupported`; reject at approval → no writes.
-- **Prompt:** `prompts/manage_incident.py` · v1.2.0 (create-new → redirect; clarifications ask all fields at once, with examples).
+- **Browse to pick (v1.3.0):** if no incident id is given, the node calls `list_incidents` and shows the **open incidents to choose from** (reply with an id); the user can say "mine" → filtered to the operator (`current_user_id`, reported-by **or** assigned), or "closed"/"all" to widen (closed rows also show the agent's root-cause/suggestion + what the technician did). The original intent ("update") is carried so the chosen id resumes correctly. Opening a *new* incident → redirected to troubleshoot.
+- **Edge cases:** no id → list incidents to pick (above); unknown id → clarify; **close requires a comment** → ask if missing (never invented); close an already-closed / assign to a closed incident → `unsupported`; reject at approval → no writes.
+- **Prompt:** `prompts/manage_incident.py` · v1.3.0 (create-new → redirect; clarify asks all fields with examples; lists open incidents to pick when no id given).
 
 ### 6. Intake Agent — `nodes/intake.py`  ✅
 - **Purpose:** the troubleshoot entry point — ensure a **valid machine** + a **symptom** before diagnosis; hand `mvc_code` + `symptom` to Diagnosis.

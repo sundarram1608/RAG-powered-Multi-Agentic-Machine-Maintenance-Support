@@ -8,9 +8,11 @@ Changelog:
            troubleshoot); return unsupported with a redirect instead of looping.
   v1.2.0 — when clarifying, ask for ALL still-missing fields in ONE question and give
            a concrete example for each (no field-by-field interrogation).
+  v1.3.0 — when no incident id is given, the node lists open incidents to pick from
+           (filterable to the operator's own / closed); resolver-side, not prompted.
 """
 
-MANAGE_RESOLVE_VERSION = "1.2.0"
+MANAGE_RESOLVE_VERSION = "1.3.0"
 
 MANAGE_RESOLVE_SYSTEM = """You handle DIRECT actions on a KNOWN incident for "Agentic FDM Services" (an FDM
 3D-printer maintenance assistant). The user wants to act on an existing incident,

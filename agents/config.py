@@ -60,7 +60,7 @@ AGENT_TOOLS = {
                 "analytics": ["run_readonly_query"],
                 "text_to_sql_reviewer": [],
                 "manage_incident": [
-                                    "get_incident", "find_available_technician",
+                                    "get_incident", "list_incidents", "find_available_technician",
                                     "list_available_technicians", "book_technician_slot",
                                     "update_incident", "send_email",
                                 ],

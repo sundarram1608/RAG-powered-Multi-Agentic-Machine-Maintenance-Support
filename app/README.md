@@ -32,6 +32,10 @@ Needs `GROQ_API_KEY` + `GOOGLE_API_KEY` in `.env` (plus `LANGSMITH_*` if tracing
    | `approve` | buttons: **✅ Approve** / **✖ Reject** |
 
    While a button-interrupt is pending, the chat input is disabled (choose an option).
+   A **✖ Cancel / ask something else** button is shown for any pending interrupt — it
+   abandons the paused turn (starts a fresh thread) so you can ask something different.
+   For a `manage_incident` action with no incident id, the agent **lists the open
+   incidents to pick from** (say "mine" for your own, "closed"/"all" to widen).
 
 ## Async bridge
 Streamlit is synchronous; the agent API is async, and the MCP client/graph must stay on

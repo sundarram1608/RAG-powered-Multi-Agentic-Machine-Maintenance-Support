@@ -62,6 +62,43 @@ def _clarify(plan: dict, question: str, versions: dict) -> dict:
             "clarification_question": question, "prompt_versions": versions}
 
 
+def _format_incident_list(incidents: list, status: str, mine: bool) -> str:
+    scope = " you reported or are assigned to" if mine else ""
+    if not incidents:
+        return (f"I couldn't find any {status} incidents{scope}. You can give an id "
+                "(e.g. inc_26), say 'all' / 'closed' to widen the search, or describe a "
+                "new fault to open one.")
+    lines = []
+    for it in incidents:
+        line = f"• {it['incident_id']} — {it['machine_id']} — {(it.get('summary') or '').strip()[:70]}"
+        if it.get("status") == "closed":      # closed: show agent rc/suggestion + what the tech did
+            line += (f"\n    (agent root cause: {(it.get('agent_root_cause') or '—')[:60]}; "
+                     f"suggested: {(it.get('agent_suggested_action') or '—')[:50]}; "
+                     f"technician did: {(it.get('technician_action') or '—')[:50]})")
+        lines.append(line)
+    tip = "Reply with an id (e.g. inc_22)" + ("." if mine else ", or say 'mine' / 'closed' to filter.")
+    return (f"Which incident would you like to act on? Here are the {status} "
+            f"incidents{scope}:\n" + "\n".join(lines) + "\n\n" + tip)
+
+
+async def _browse_clarify(request_text: str, original_request: str, state: dict, versions: dict) -> dict:
+    """List incidents (open by default; 'mine' -> filtered to this operator; 'closed'/
+    'all' widen) and ask the user to pick one. Carries the ORIGINAL request so the
+    chosen id resumes with the right intent."""
+    mine = bool(re.search(r"\b(my|mine|i reported|assigned to me)\b", request_text, re.I))
+    if re.search(r"\b(closed|resolved)\b", request_text, re.I):
+        status = "closed"
+    elif re.search(r"\ball\b", request_text, re.I):
+        status = "all"
+    else:
+        status = "open"
+    employee_id = state.get("current_user_id") if mine else None
+    incidents = await _call("list_incidents",
+                            {"status": status, "employee_id": employee_id}, expect_list=True)
+    plan = {"action": None, "browsing": True, "original_request": original_request}
+    return _clarify(plan, _format_incident_list(incidents, status, mine), versions)
+
+
 async def manage_resolve(state: dict) -> dict:
     user_input = state.get("user_input", "")
     versions = dict(state.get("prompt_versions", {}))
@@ -95,24 +132,33 @@ async def manage_resolve(state: dict) -> dict:
               "plan_summary": f"{verb} incident {prior['incident_id']} with the note: \"{comment}\"."}
         return {"manage_plan": pd, "requires_approval": True, "prompt_versions": versions}
 
-    # --- resolve the incident id (carried, else from the text) ---
-    incident_id = prior.get("incident_id")
-    if not incident_id:
-        match = _INC_RE.search(user_input)
-        incident_id = match.group(0).lower() if match else None
-    if not incident_id:
-        # "open / create / log / book a NEW incident" -> not a manage action (it's
-        # troubleshoot). Redirect instead of looping on "which incident?".
-        if re.search(r"\b(new|open|create|raise|log|file|start|book)\b[\w\s,]*\bincident\b",
-                     user_input, re.I):
-            plan = {"action": "unsupported", "incident_id": None,
-                    "plan_summary": "I can only act on an existing incident here. To open a new "
-                                    "one, just describe the fault (e.g. \"M03's bed won't heat\") and "
-                                    "I'll diagnose it and log the incident for you. To edit an existing "
-                                    "incident, give its id (e.g. inc_26)."}
-            return {"manage_plan": plan, "prompt_versions": versions}
-        return _clarify({"action": None, "incident_id": None},
-                        "Which incident? Please give its id, e.g. inc_26.", versions)
+    # --- resume: we previously listed incidents and asked the user to pick one ---
+    if prior.get("browsing") and prior.get("needs_clarification"):
+        m = _INC_RE.search(user_input)
+        if m:
+            incident_id = m.group(0).lower()
+            user_input = prior.get("original_request") or user_input   # re-infer the action from the original ask
+        else:   # a refinement ("mine", "closed", "show all") -> re-list
+            return await _browse_clarify(user_input, prior.get("original_request") or user_input,
+                                         state, versions)
+    else:
+        # --- resolve the incident id (carried, else from the text) ---
+        incident_id = prior.get("incident_id")
+        if not incident_id:
+            match = _INC_RE.search(user_input)
+            incident_id = match.group(0).lower() if match else None
+        if not incident_id:
+            # "open / create / log / book a NEW incident" -> troubleshoot, not manage.
+            if re.search(r"\b(new|open|create|raise|log|file|start|book)\b[\w\s,]*\bincident\b",
+                         user_input, re.I):
+                plan = {"action": "unsupported", "incident_id": None,
+                        "plan_summary": "I can only act on an existing incident here. To open a new "
+                                        "one, just describe the fault (e.g. \"M03's bed won't heat\") and "
+                                        "I'll diagnose it and log the incident for you. To edit an existing "
+                                        "incident, give its id (e.g. inc_26)."}
+                return {"manage_plan": plan, "prompt_versions": versions}
+            # no id -> list incidents so the user can pick one (open by default)
+            return await _browse_clarify(user_input, user_input, state, versions)
 
     incident = await _call("get_incident", {"incident_id": incident_id})
     if not incident.get("exists"):

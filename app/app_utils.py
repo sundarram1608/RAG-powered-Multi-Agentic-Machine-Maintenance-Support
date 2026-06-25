@@ -115,16 +115,24 @@ def handle_user_message(text) -> None:
 
 
 def render_pending_controls() -> None:
-    """If a button-interrupt is pending, render its buttons; resume + rerun on click."""
+    """When an interrupt is pending: render its action buttons (decision/choice/approve)
+    and a Cancel escape hatch (for any interrupt, incl. a typed clarify)."""
     pending = st.session_state.pending
-    if not pending or pending["kind"] not in _BUTTONS:
+    if not pending:
         return
-    cols = st.columns(len(_BUTTONS[pending["kind"]]))
-    for col, (label, value) in zip(cols, _BUTTONS[pending["kind"]]):
-        if col.button(label, key=f"{pending['kind']}:{value}:{pending['turn_id']}", use_container_width=True):
-            _append(ROLE_USER, label)
-            with st.spinner("Working…"):
-                res = backend.resume_turn(st.session_state.thread_id, value,
-                                          pending["turn_id"], st.session_state.user_id)
-            _apply(res)
-            st.rerun()
+    if pending["kind"] in _BUTTONS:
+        cols = st.columns(len(_BUTTONS[pending["kind"]]))
+        for col, (label, value) in zip(cols, _BUTTONS[pending["kind"]]):
+            if col.button(label, key=f"{pending['kind']}:{value}:{pending['turn_id']}", use_container_width=True):
+                _append(ROLE_USER, label)
+                with st.spinner("Working…"):
+                    res = backend.resume_turn(st.session_state.thread_id, value,
+                                              pending["turn_id"], st.session_state.user_id)
+                _apply(res)
+                st.rerun()
+    # escape hatch — abandon the pending interrupt and ask something else
+    if st.button("✖ Cancel / ask something else", key=f"cancel:{pending['turn_id']}"):
+        st.session_state.pending = None
+        st.session_state.thread_id = uuid.uuid4().hex   # fresh graph state; orphan the paused turn
+        _append(ROLE_ASSISTANT, "Okay — cancelled. What would you like to do instead?")
+        st.rerun()

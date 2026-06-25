@@ -53,7 +53,7 @@ the model, not just for humans.
 
 | Transport           | Tool group                                           | How it runs                                                                           | Why                                                         |
 | ------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| **stdio** (default) | local data plane — 8 read + 2 RAG + 3 write tools    | the agent **auto-spawns** `server.py` as a child process; no port, no network surface | tools bundled with the agent, touching local MySQL + Chroma |
+| **stdio** (default) | local data plane — 9 read + 2 RAG + 3 write tools    | the agent **auto-spawns** `server.py` as a child process; no port, no network surface | tools bundled with the agent, touching local MySQL + Chroma |
 | **streamable-HTTP** | shared services — `run_readonly_query`, `send_email` | runs as a **separate `127.0.0.1:8000` process**; the agent connects by URL            | "service-style" tools you could host separately later       |
 
 
@@ -73,7 +73,7 @@ python mcp_server/server.py http        # -> http://127.0.0.1:8000/mcp
 #    to run it by hand: python mcp_server/server.py            # (default = stdio)
 
 # smoke test — list the tools each transport exposes, no LLM/network:
-python mcp_server/server.py --selftest   # expect 13 stdio + 2 http tools
+python mcp_server/server.py --selftest   # expect 14 stdio + 2 http tools
 ```
 
 > **First-time prerequisites:** `python mcp_server/setup_db_users.py` (DB users)
@@ -127,6 +127,15 @@ python mcp_server/server.py --selftest   # expect 13 stdio + 2 http tools
 - **Output:** `{exists: True, incident_id, machine_id, status, reported_date, reported_by, user_complaint, agent_root_cause, agentic_resolution, technician_id, work_date, work_slot, technician_comments, incident_closure_date}` · or `{exists: False}`.
 - **Used by:** Manage Incident (confirm existence, show state for approval, find who to notify).
 - **Edge cases:** unknown id → `{exists: False}`; returns `reported_by`/`technician_id` (employee_ids, not PII — `send_email` resolves addresses internally). Distinct from `get_incident_history` (which is keyed by machine).
+
+### `list_incidents(status="open", employee_id=None)`
+
+- **Purpose:** browse incidents so a user can pick one to act on (used by Manage Incident when no id was given).
+- **What it does:** `SELECT … FROM incidents` filtered by status (`open` = `incident_closure_date IS NULL`; `closed`; `all`) and, if `employee_id` given, `reported_by = id OR technician_id = id` ("my incidents").
+- **Input:** `status: str = "open"` (`open`/`closed`/`all`); `employee_id: str | None` (e.g. `E01`).
+- **Output:** list of `{incident_id, machine_id, status, reported_date, summary}` (summary = the complaint). **Closed** items additionally include `{agent_root_cause, agent_suggested_action, technician_action}`. **No PII** — never `phone`/`email`; `reported_by`/`technician_id` are used to filter but not returned.
+- **Used by:** Manage Incident (list open incidents to choose from; `employee_id` = the operator for "my incidents").
+- **Edge cases:** none match → empty list (the agent then suggests widening or describing a new fault).
 
 ### `check_inventory(part)`
 
