@@ -316,7 +316,7 @@ The plumbing every node stands on (no nodes yet):
 - **PII scrub:** regex strips any email / 7+-digit phone from the final text (belt-and-suspenders; tools already keep PII out of state).
 - **Verifier exhaustion:** routed to Technician Action (auto-dispatch); Output states a technician will assess it (no apologetic caveat).
 - **Edge cases:** empty analytics result → "no matching records"; `error` action → generic apology. Systematic faithfulness eval deferred to Phase 5.
-- **Prompt:** `prompts/output.py` · v1.0.0 (covers the general + analytics LLM modes).
+- **Prompt:** `prompts/output.py` · v1.1.0 (general + analytics LLM modes; general replies in context — ack/greeting/capabilities/small-talk).
 
 ## Graph assembly (Phase 4c)
 
