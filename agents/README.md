@@ -223,7 +223,7 @@ The plumbing every node stands on (no nodes yet):
 - **Availability rules live in the node** (not the prompt — the LLM has no live data): named-&-available → propose; named-unavailable **or** unnamed → present `list_available_technicians` and ask the manager to choose; the chosen tech is then booked. **Availability enforced** (no overload); **reassign auto-frees the prior slot** (`book_technician_slot`).
 - **Notifications:** close → operator; assign → technician **and** operator (`send_email`; `email_dry_run` flag for tests).
 - **Edge cases:** no/unknown incident id → clarify; **close requires a comment** → ask if missing (never invented); close an already-closed / assign to a closed incident → `unsupported`; reject at approval → no writes.
-- **Prompt:** `prompts/manage_incident.py` · v1.1.0 (creating a new incident is unsupported here → redirect to troubleshoot).
+- **Prompt:** `prompts/manage_incident.py` · v1.2.0 (create-new → redirect; clarifications ask all fields at once, with examples).
 
 ### 6. Intake Agent — `nodes/intake.py`  ✅
 - **Purpose:** the troubleshoot entry point — ensure a **valid machine** + a **symptom** before diagnosis; hand `mvc_code` + `symptom` to Diagnosis.

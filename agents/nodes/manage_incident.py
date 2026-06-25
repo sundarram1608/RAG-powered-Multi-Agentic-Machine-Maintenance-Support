@@ -86,6 +86,15 @@ async def manage_resolve(state: dict) -> dict:
                             f"{named} has no free slot. Available: {_fmt(all_av)}. "
                             f"Which should I assign?", versions)
 
+    # --- resume: we previously asked for a closing / update note ---
+    if prior.get("needs_clarification") and prior.get("action") in ("close", "update_comment"):
+        comment = user_input.strip()
+        verb = "Close" if prior["action"] == "close" else "Update"
+        pd = {**prior, "comment": comment, "needs_clarification": False, "question": None,
+              "requires_approval": True,
+              "plan_summary": f"{verb} incident {prior['incident_id']} with the note: \"{comment}\"."}
+        return {"manage_plan": pd, "requires_approval": True, "prompt_versions": versions}
+
     # --- resolve the incident id (carried, else from the text) ---
     incident_id = prior.get("incident_id")
     if not incident_id:
@@ -143,7 +152,8 @@ async def manage_resolve(state: dict) -> dict:
             pd.update(action="unsupported", plan_summary="No technicians are currently available to assign.")
             return {"manage_plan": pd, "prompt_versions": versions}
         return _clarify(pd, f"Which technician should I assign to {incident_id} on "
-                            f"{incident['machine_id']}? Available: {_fmt(all_av)}.", versions)
+                            f"{incident['machine_id']}? Reply with an id (e.g. E05). "
+                            f"Available: {_fmt(all_av)}.", versions)
 
     pd["requires_approval"] = pd["action"] in ("close", "update_comment")
     return {"manage_plan": pd, "requires_approval": pd["requires_approval"],
