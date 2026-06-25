@@ -197,7 +197,7 @@ The plumbing every node stands on (no nodes yet):
 - **Input format** (state keys read): `user_input` (else the last `messages` entry) + the recent `messages` window (last 5 exchanges) for follow-up context.
 - **Output format** (Pydantic `Route` via `with_structured_output`) → writes state: `intent` (`"troubleshoot" | "analytics" | "manage_incident" | "general"`), `prompt_versions["supervisor"]`.
 - **Routing:** `troubleshoot` → **Intake** · `analytics` → **Analytics** · `manage_incident` → **Manage Incident** · `general` → **Output**.
-- **Edge cases:** READ data question → `analytics`, WRITE/action on a known record → `manage_incident`; a symptom that needs diagnosing → `troubleshoot` (even if "log it" is mentioned); capability/greeting → `general`; ambiguous-but-actionable → `troubleshoot` (Intake clarifies, avoiding dead-ends).
+- **Edge cases:** READ data question → `analytics`, WRITE/action on a known record → `manage_incident`; a symptom that needs diagnosing → `troubleshoot` (even if "log it" is mentioned); capability/greeting → `general`; ambiguous-but-actionable → `troubleshoot` (Intake clarifies, avoiding dead-ends); a brief follow-up routes to its referent's path (e.g. after listing incidents, "which are mine?" → `analytics`).
 - **Prompt:** `prompts/supervisor.py` · v1.2.0 (opening/"booking" a NEW incident routes to troubleshoot, not manage; context-aware — routes a follow-up to its referent's path).
 
 ### 3. Analytics Agent (Text-to-SQL coder + executor) — `nodes/analytics.py`  ✅
