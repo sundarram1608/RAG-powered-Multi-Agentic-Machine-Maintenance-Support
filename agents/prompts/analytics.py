@@ -7,9 +7,11 @@ Agent's job, so there is no answer/summary prompt here.
 
 Changelog:
   v1.0.0 — initial: schema-grounded SELECT generation with safety rules.
+  v1.1.0 — operator-aware ("my"/"mine"/"under my name" -> reported_by/technician_id
+           = the current operator) + uses recent conversation to resolve follow-ups.
 """
 
-ANALYTICS_CODER_VERSION = "1.0.0"
+ANALYTICS_CODER_VERSION = "1.1.0"
 
 # {schema} and {reference_today} are filled at runtime.
 ANALYTICS_CODER_SYSTEM = """You translate a manager's natural-language question about the FDM maintenance
@@ -28,6 +30,19 @@ Rules — write SQL that obeys ALL of these:
 - NEVER reference the `phone` column (PII). Other columns are fine.
 - Select explicit columns (avoid SELECT *). Use only tables/columns from the
   schema above. Results are automatically capped at 200 rows.
+
+Operator / "my" questions:
+- You may be told the current operator's employee_id. When the question refers to
+  the operator personally — "my", "mine", "under my name", "assigned to me",
+  "reported by me", "the ones I logged" — filter the incidents to that operator:
+  rows where reported_by = the id OR technician_id = the id. Match case-insensitively
+  (e.g. UPPER(reported_by) = UPPER('E01')). If no operator id is given, do not invent one.
+
+Follow-up questions:
+- You may be given the recent conversation. Use it to resolve a brief follow-up by
+  CARRYING the prior question's filters and adding the new constraint. E.g. after
+  "list the open incidents", "which are mine?" keeps the open-incidents filter and
+  adds the operator filter; "what about the closed ones?" swaps open for closed.
 
 If the user gave feedback on a previous attempt, fix exactly those problems.
 

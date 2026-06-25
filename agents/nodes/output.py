@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # agents/ on path
 from llms import get_reasoner
 from prompts.output import OUTPUT_SYSTEM, OUTPUT_SYSTEM_VERSION
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 _EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 _PHONE_RE = re.compile(r"\b\d{7,}\b")
@@ -111,7 +111,11 @@ def output_node(state: dict) -> dict:
 
     versions = dict(state.get("prompt_versions", {}))
     versions["output"] = OUTPUT_SYSTEM_VERSION
-    return {"final_response": _scrub_pii(text), "prompt_versions": versions}
+    final = _scrub_pii(text)
+    # Append the assistant turn to the append-only history so the next turn's gates
+    # (Input/Supervisor) + Analytics coder can resolve follow-ups (see history.py).
+    return {"final_response": final, "prompt_versions": versions,
+            "messages": [AIMessage(content=final)]}
 
 
 # === SELF-TEST — python agents/nodes/output.py  (needs GROQ key for general+analytics) ===

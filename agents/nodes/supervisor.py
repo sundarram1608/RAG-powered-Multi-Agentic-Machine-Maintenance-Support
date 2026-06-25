@@ -19,6 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # agents/ on path
 from llms import get_reasoner
 from schemas import Route
+from history import format_recent
 from prompts.supervisor import SUPERVISOR_SYSTEM, SUPERVISOR_SYSTEM_VERSION
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -34,10 +35,17 @@ def _user_text(state: dict) -> str:
 def supervisor_node(state: dict) -> dict:
     """Route the user turn; return {intent, prompt_versions}."""
     user_text = _user_text(state)
+    # Prior context = history minus the current turn (already appended in api.start_turn).
+    context = format_recent((state.get("messages") or [])[:-1], max_exchanges=5)
+    human = ""
+    if context:
+        human += f"Recent conversation (for context only):\n{context}\n\n"
+    human += f'Route this user message:\n\n"""\n{user_text}\n"""'
+
     llm = get_reasoner().with_structured_output(Route)
     result = llm.invoke([
         SystemMessage(content=SUPERVISOR_SYSTEM),
-        HumanMessage(content=f'Route this user message:\n\n"""\n{user_text}\n"""'),
+        HumanMessage(content=human),
     ])
 
     versions = dict(state.get("prompt_versions", {}))

@@ -24,6 +24,7 @@ import config
 import mcp_client
 from llms import get_reasoner
 from schemas import SqlPlan
+from history import format_recent
 from prompts.analytics import ANALYTICS_CODER_SYSTEM, ANALYTICS_CODER_VERSION
 from db_schema import get_schema_context
 
@@ -36,7 +37,16 @@ def analytics_generate(state: dict) -> dict:
     system = ANALYTICS_CODER_SYSTEM.format(
         schema=get_schema_context(), reference_today=config.REFERENCE_TODAY)
 
-    human = f"Question: {question}"
+    # Operator identity + recent conversation so "my/mine" and follow-ups resolve.
+    preamble = []
+    uid = state.get("current_user_id")
+    if uid:
+        preamble.append(f'The current operator\'s employee_id is "{uid}".')
+    context = format_recent((state.get("messages") or [])[:-1], max_exchanges=5)
+    if context:
+        preamble.append(f"Recent conversation (for resolving follow-ups):\n{context}")
+    human = ("\n\n".join(preamble) + "\n\n" if preamble else "") + f"Question: {question}"
+
     prior, review, result = state.get("sql_plan"), state.get("sql_review"), state.get("sql_result")
     db_error = result.get("error") if isinstance(result, dict) and not result.get("ok", True) else None
     if prior and (review or db_error):

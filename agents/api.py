@@ -34,6 +34,7 @@ from graph import app_graph
 
 import observability as obs
 from langgraph.types import Command
+from langchain_core.messages import HumanMessage
 
 _RATE_LIMIT_HINTS = ("rate limit", "ratelimit", "429", "resource_exhausted",
                      "tokens per day", "tokens per minute", "quota", "over capacity")
@@ -72,7 +73,8 @@ async def start_turn(thread_id: str, user_id: str, message: str, turn_id: str = 
         thread_id, user_id, message, turn_id=turn_id, run_name="turn:start")
     try:
         result = await app_graph.ainvoke(
-            {"user_input": message, "current_user_id": user_id}, cfg)
+            {"user_input": message, "current_user_id": user_id,
+             "messages": [HumanMessage(content=message)]}, cfg)
     except Exception as e:
         return _error_result(e, turn_id, run_id)
     obs.enrich_run(run_id, meta, result)

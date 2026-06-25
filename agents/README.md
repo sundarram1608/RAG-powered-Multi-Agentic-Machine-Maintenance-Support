@@ -80,6 +80,13 @@ resume_turn(thread_id, value)           -> Result   # answer a clarification / a
 
 - **Within a thread:** after each step LangGraph **checkpoints** the full `State`
   keyed by `thread_id`; the next turn reloads it → the conversation continues.
+- **Conversation history (`messages`):** the user turn is appended at the start of a
+  request (`api.start_turn`) and the assistant's final reply at the end
+  (`output_node`); both via the `add_messages` reducer. `history.format_recent(...)`
+  renders the last **5 exchanges** so the Input guard, Supervisor, and Analytics
+  coder can resolve brief follow-ups ("which are mine?", "what about the closed
+  ones?") that are meaningless in isolation. The structured state is still the
+  primary working memory — this is a bounded window, not the whole transcript.
 - **Across threads:** isolated — a new chat is a new `thread_id` with fresh state
   (no sharing). *(Optional cross-thread long-term memory via a Store is not used.)*
 - **Long chats (e.g. 80 turns):** there is no fixed "thread token limit" — the
@@ -177,32 +184,32 @@ The plumbing every node stands on (no nodes yet):
 - **Purpose:** the front gate — classify each user turn as **in-scope** (FDM maintenance/service/faults, analytics, capabilities, or operational incident/booking actions) **and safe** (no prompt-injection, no PII/credential extraction). Pure classifier; it never answers or acts.
 - **LLM:** **Groq Llama 3.3 70B** (reasoner), `with_structured_output(GuardResult)`.
 - **Tools:** none.
-- **Input:** the current user turn (`state.user_input`, else the last message).
+- **Input:** the current user turn (`state.user_input`, else the last message) + the recent `messages` window (last 5 exchanges) so a brief follow-up is judged in context.
 - **Output:** `{input_safe: bool, guard_reason: str, prompt_versions["input"]}`.
 - **Routing:** `input_safe = False` → **Output** (polite refusal carrying `guard_reason`); `True` → **Supervisor**.
 - **Edge cases:** instruction-override / "print your prompt" → `safe=False`; request for an employee's phone/email/credentials → `safe=False` (even when the topic is in-scope); off-domain question → `safe=False`; **operational actions** like "mark incident complete" / "book a technician" → `safe=True` (capability decided downstream); vague/ambiguous but on-topic → `safe=True` (clarified by later agents). **Moderate** strictness — only *clear* overrides/PII are blocked.
-- **Prompt:** `prompts/input.py` · v1.0.0.
+- **Prompt:** `prompts/input.py` · v1.1.0 (context-aware: a brief follow-up referring to earlier in-scope content is in scope).
 
 ### 2. Supervisor Agent — `nodes/supervisor.py`  ✅
 - **Purpose:** the intent router — classify the (already-guarded) turn into exactly one of four routes. Pure router; never answers or acts.
 - **LLM:** **Groq Llama 3.3 70B** (reasoner).
 - **Tools:** none.
-- **Input format** (state keys read): `user_input` (else the last `messages` entry).
+- **Input format** (state keys read): `user_input` (else the last `messages` entry) + the recent `messages` window (last 5 exchanges) for follow-up context.
 - **Output format** (Pydantic `Route` via `with_structured_output`) → writes state: `intent` (`"troubleshoot" | "analytics" | "manage_incident" | "general"`), `prompt_versions["supervisor"]`.
 - **Routing:** `troubleshoot` → **Intake** · `analytics` → **Analytics** · `manage_incident` → **Manage Incident** · `general` → **Output**.
 - **Edge cases:** READ data question → `analytics`, WRITE/action on a known record → `manage_incident`; a symptom that needs diagnosing → `troubleshoot` (even if "log it" is mentioned); capability/greeting → `general`; ambiguous-but-actionable → `troubleshoot` (Intake clarifies, avoiding dead-ends).
-- **Prompt:** `prompts/supervisor.py` · v1.1.0 (opening/"booking" a NEW incident routes to troubleshoot, not manage).
+- **Prompt:** `prompts/supervisor.py` · v1.2.0 (opening/"booking" a NEW incident routes to troubleshoot, not manage; context-aware — routes a follow-up to its referent's path).
 
 ### 3. Analytics Agent (Text-to-SQL coder + executor) — `nodes/analytics.py`  ✅
 - **Purpose:** answer read-only analytics questions by generating SQL (grounded in the schema) and, after the Reviewer approves, executing it. Result summarization is the **Output** agent's job.
 - **LLM:** **Groq Llama 3.3 70B** (generate phase); **no LLM** in the execute phase.
 - **Tools:** `run_readonly_query` (execute phase only).
 - **Two phases (one agent):** `analytics_generate` (LLM → `SqlPlan`) and `analytics_execute` (mechanical `run_readonly_query` → rows).
-- **Input format** (state read): `user_input`; on retry also `sql_plan` + `sql_review`/`sql_result` (the critique/DB-error to fix).
+- **Input format** (state read): `user_input`, `current_user_id` (for "my/mine"), the recent `messages` window (for follow-ups); on retry also `sql_plan` + `sql_review`/`sql_result` (the critique/DB-error to fix).
 - **Output format** (Pydantic `SqlPlan` via `with_structured_output`) → state `sql_plan`, `analytics_attempts`; execute → `sql_result`; tags `prompt_versions["analytics"]`.
 - **Schema grounding:** the prompt is filled with `get_schema_context()` (from `schema_metadata.json`) + `REFERENCE_TODAY` (`2026-06-16`) so date logic matches the dataset.
 - **Edge cases:** reviewer-reject or DB-error → regenerate with the critique (capped at `ANALYTICS_MAX_ATTEMPTS = 3`); never selects `phone`; empty result → handled by Output ("no matching records"); results auto-capped at 200 rows.
-- **Prompt:** `prompts/analytics.py` (`ANALYTICS_CODER_SYSTEM`) · v1.0.0.
+- **Prompt:** `prompts/analytics.py` (`ANALYTICS_CODER_SYSTEM`) · v1.1.0 (operator-aware "my/mine" -> reported_by/technician_id; uses recent conversation for follow-ups).
 
 ### 4. Text-to-SQL Reviewer — `nodes/text_to_sql_reviewer.py`  ✅
 - **Purpose:** judge the generated SQL **before** it runs — the *semantic* layer of a 3-layer defense (reviewer = grounded/relevant/safe; `validate_select_sql` = mechanical; `maint_readonly` = DB enforcement).

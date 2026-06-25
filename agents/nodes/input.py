@@ -15,6 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # agents/ on path
 from llms import get_reasoner
 from schemas import GuardResult
+from history import format_recent
 from prompts.input import INPUT_SYSTEM, INPUT_SYSTEM_VERSION
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -45,10 +46,17 @@ _SCRATCH_RESET = {
 def input_node(state: dict) -> dict:
     """Reset per-request scratch, then screen the user turn."""
     user_text = _user_text(state)
+    # Prior context = history minus the current turn (already appended in api.start_turn).
+    context = format_recent((state.get("messages") or [])[:-1], max_exchanges=5)
+    human = ""
+    if context:
+        human += f"Recent conversation (for context only):\n{context}\n\n"
+    human += f'Screen this user message:\n\n"""\n{user_text}\n"""'
+
     llm = get_reasoner().with_structured_output(GuardResult)
     result = llm.invoke([
         SystemMessage(content=INPUT_SYSTEM),
-        HumanMessage(content=f'Screen this user message:\n\n"""\n{user_text}\n"""'),
+        HumanMessage(content=human),
     ])
 
     versions = dict(state.get("prompt_versions", {}))
