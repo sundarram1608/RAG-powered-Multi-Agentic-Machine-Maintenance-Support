@@ -76,7 +76,12 @@ def _prompt_text(kind, payload) -> str:
 
 
 def _apply(res) -> None:
-    """Update state from a backend result: either a final answer or a new interrupt."""
+    """Update state from a backend result: final answer, a new interrupt, or an error."""
+    if res["kind"] == "error":
+        # provider/other failure (e.g. rate limit) — show the friendly message and
+        # leave `pending` unchanged so the user can retry the same step.
+        _append(ROLE_ASSISTANT, res.get("content") or "⚠️ Something went wrong. Please try again.")
+        return
     if res["kind"] == "answer":
         _append(ROLE_ASSISTANT, res.get("content") or "_(no response)_")
         st.session_state.pending = None

@@ -41,9 +41,9 @@ async def main():
         else:
             res = await start_turn(thread, user_id, msg)
         turn_id = res.get("turn_id")
-        if res["kind"] == "answer":
+        if res["kind"] in ("answer", "error"):
             print(f"\nbot> {res['content']}\n")
-            paused = False
+            paused = (res["kind"] == "error" and paused)   # keep paused on error so you can retry
         else:
             p = res["payload"]
             prompt = p.get("question") or p.get("guidance") or p.get("summary") or ""

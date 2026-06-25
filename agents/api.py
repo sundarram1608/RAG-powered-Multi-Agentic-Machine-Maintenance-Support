@@ -13,6 +13,11 @@ checkpointer isolates state per thread):
 Both return a dict the caller switches on:
   {"kind": "answer", "content": <final_response>, "turn_id": ...}             # turn done
   {"kind": "clarify"|"decision"|"choice"|"approve", "payload": …, "turn_id": …}  # paused
+  {"kind": "error", "content": <friendly message>, "turn_id": ...}            # provider/other failure
+
+Provider failures (rate limits, outages) are caught here and returned as a friendly
+"error" message instead of propagating as a raw exception to the UI — the traceback
+still goes to stderr + the LangSmith trace for debugging.
 
 Observability (Phase 5a): every invoke is traced to LangSmith via observability.*,
 grouped by thread_id (session) and turn_id, with PII masked and outcome metadata
@@ -20,6 +25,7 @@ attached after the run. Tracing is a no-op unless LANGSMITH_TRACING=true in .env
 """
 
 import sys
+import traceback
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))           # agents/ on path
@@ -28,6 +34,18 @@ from graph import app_graph
 
 import observability as obs
 from langgraph.types import Command
+
+_RATE_LIMIT_HINTS = ("rate limit", "ratelimit", "429", "resource_exhausted",
+                     "tokens per day", "tokens per minute", "quota", "over capacity")
+
+
+def _friendly_error(exc: Exception) -> str:
+    s = str(exc).lower()
+    if any(h in s for h in _RATE_LIMIT_HINTS):
+        return ("⚠️ I've hit the free-tier usage limit for the AI service right now, so I "
+                "can't finish that. Please wait a minute and try again — if it keeps "
+                "happening, the daily quota may be used up (it resets later).")
+    return "⚠️ Sorry — something went wrong on my side. Please try again in a moment."
 
 
 def _interpret(result: dict, turn_id: str, run_id) -> dict:
@@ -42,12 +60,21 @@ def _interpret(result: dict, turn_id: str, run_id) -> dict:
             "turn_id": turn_id, "run_id": rid}
 
 
+def _error_result(exc, turn_id, run_id) -> dict:
+    traceback.print_exc(file=sys.stderr)   # full traceback to logs (+ it's in the trace)
+    return {"kind": "error", "content": _friendly_error(exc),
+            "turn_id": turn_id, "run_id": str(run_id) if run_id else None}
+
+
 async def start_turn(thread_id: str, user_id: str, message: str, turn_id: str = None) -> dict:
     turn_id = turn_id or obs.new_turn_id()
     cfg, run_id, meta = obs.make_config(
         thread_id, user_id, message, turn_id=turn_id, run_name="turn:start")
-    result = await app_graph.ainvoke(
-        {"user_input": message, "current_user_id": user_id}, cfg)
+    try:
+        result = await app_graph.ainvoke(
+            {"user_input": message, "current_user_id": user_id}, cfg)
+    except Exception as e:
+        return _error_result(e, turn_id, run_id)
     obs.enrich_run(run_id, meta, result)
     return _interpret(result, turn_id, run_id)
 
@@ -56,6 +83,9 @@ async def resume_turn(thread_id: str, value, turn_id: str = None, user_id: str =
     turn_id = turn_id or obs.new_turn_id()
     cfg, run_id, meta = obs.make_config(
         thread_id, user_id, str(value), turn_id=turn_id, run_name="turn:resume")
-    result = await app_graph.ainvoke(Command(resume=value), cfg)
+    try:
+        result = await app_graph.ainvoke(Command(resume=value), cfg)
+    except Exception as e:
+        return _error_result(e, turn_id, run_id)
     obs.enrich_run(run_id, meta, result)
     return _interpret(result, turn_id, run_id)
