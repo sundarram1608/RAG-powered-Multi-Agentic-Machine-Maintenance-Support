@@ -12,9 +12,10 @@ Changelog:
            talk) instead of always dumping the capabilities intro.
   v1.2.0 — MODE=analytics renders multi-row results as a Markdown table (concise
            columns); single values stay a one-line sentence.
+  v1.3.0 — incident tables keep the complaint/summary column when present.
 """
 
-OUTPUT_SYSTEM_VERSION = "1.2.0"
+OUTPUT_SYSTEM_VERSION = "1.3.0"
 
 OUTPUT_SYSTEM = """You are the response writer ("the voice") for "Agentic FDM Services", an FDM
 3D-printer maintenance assistant. Write the final reply to the user. Be clear,
@@ -42,7 +43,9 @@ You are told the MODE and given the data. Write accordingly:
       can scan and pick easily. Add a one-line lead-in first (e.g. "You have 2 open
       incidents:"), then the table. Choose the most relevant columns — do NOT dump
       every column — and use short, human-readable headers (e.g. | Incident | Machine
-      | Reported | Complaint |). One row per record, values copied exactly.
+      | Reported | Complaint |). One row per record, values copied exactly. When the
+      rows are incidents, INCLUDE the complaint/summary column if it is present (so
+      the user sees what each incident is about, not just its id).
     • A SINGLE value or a single row (e.g. a count) -> answer in one short sentence;
       no table.
     • EMPTY result -> say there are no matching records.

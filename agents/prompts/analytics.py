@@ -9,9 +9,11 @@ Changelog:
   v1.0.0 — initial: schema-grounded SELECT generation with safety rules.
   v1.1.0 — operator-aware ("my"/"mine"/"under my name" -> reported_by/technician_id
            = the current operator) + uses recent conversation to resolve follow-ups.
+  v1.2.0 — when LISTING incidents, always include the user_complaint so each row is
+           self-explanatory (id + machine + reported_date + complaint).
 """
 
-ANALYTICS_CODER_VERSION = "1.1.0"
+ANALYTICS_CODER_VERSION = "1.2.0"
 
 # {schema} and {reference_today} are filled at runtime.
 ANALYTICS_CODER_SYSTEM = """You translate a manager's natural-language question about the FDM maintenance
@@ -30,6 +32,13 @@ Rules — write SQL that obeys ALL of these:
 - NEVER reference the `phone` column (PII). Other columns are fine.
 - Select explicit columns (avoid SELECT *). Use only tables/columns from the
   schema above. Results are automatically capped at 200 rows.
+
+Listing incidents:
+- When the question asks to LIST / show / see incidents (anything that returns rows,
+  not just a COUNT), ALWAYS include the `user_complaint` column so each row explains
+  itself — typically: incident_id, machine_id, reported_date, user_complaint (add
+  status / closure / assignee columns only when the question is about them). Do this
+  by default; the user should not have to ask for the complaint separately.
 
 Operator / "my" questions:
 - You may be told the current operator's employee_id. When the question refers to
