@@ -56,7 +56,9 @@ def main() -> None:
 
     pending = st.session_state.pending
     button_interrupt = bool(pending and pending["kind"] != "clarify")
-    placeholder = (pending["payload"].get("question") if (pending and pending["kind"] == "clarify")
+    # The clarify question is already shown in the chat bubble above — keep the input
+    # placeholder short (don't echo the whole question, which can be long guidance).
+    placeholder = ("Type your answer…" if (pending and pending["kind"] == "clarify")
                    else "Describe the issue, ask a question, or manage an incident…")
     prompt = st.chat_input(placeholder, disabled=button_interrupt)
     if prompt:
