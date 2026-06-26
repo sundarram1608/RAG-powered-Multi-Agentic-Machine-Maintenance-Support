@@ -28,6 +28,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # agents/ on path
+import clarify
 import config
 import mcp_client
 from llms import get_reasoner
@@ -126,6 +127,9 @@ async def manage_resolve(state: dict) -> dict:
     # --- resume: we previously asked for a closing / update note ---
     if prior.get("needs_clarification") and prior.get("action") in ("close", "update_comment"):
         comment = user_input.strip()
+        if clarify.is_stuck(comment):     # don't record "I don't know" as the note — guide instead
+            q = prior.get("question") or "What was done or found?"
+            return _clarify(prior, clarify.guide(q, "comment"), versions)
         verb = "Close" if prior["action"] == "close" else "Update"
         pd = {**prior, "comment": comment, "needs_clarification": False, "question": None,
               "requires_approval": True,

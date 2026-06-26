@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # agents/ on path
+import clarify
 import mcp_client
 from llms import get_reasoner
 from schemas import Intake
@@ -67,28 +68,33 @@ async def intake_node(state: dict) -> dict:
     symptom = extracted.symptom or carried_symptom
     mvc_code = machine_status = None
 
+    stuck = clarify.is_stuck(user_input)
+
     # Validate the machine (resolve mvc_code/status) when one was given.
     if machine_id:
         machine = await _get_machine(machine_id)
         if not machine.get("exists"):
+            q = f"I couldn't find machine {machine_id}. Could you confirm the machine id?"
             return _result(machine_id, None, None, symptom, True,
-                           f"I couldn't find machine {machine_id}. Could you confirm "
-                           f"the machine id?", versions)
+                           clarify.guide(q, "machine_id") if stuck else q, versions)
         machine_id = machine.get("machine_id", machine_id)   # normalized
         mvc_code = machine.get("mvc_code")
         machine_status = machine.get("status")
         if machine_status == "Decommissioned":
+            q = (f"Machine {machine_id} ({machine.get('model_name')}) is already "
+                 f"decommissioned — is the machine number correct?")
             return _result(machine_id, mvc_code, machine_status, symptom, True,
-                           f"Machine {machine_id} ({machine.get('model_name')}) is already "
-                           f"decommissioned — is the machine number correct?", versions)
+                           clarify.guide(q, "machine_id") if stuck else q, versions)
 
     # Ask for whatever is still missing.
     if not machine_id:
+        q = "Which machine is this? Please give its id, like M01."
         return _result(None, None, None, symptom, True,
-                       "Which machine is this? Please give its id, like M01.", versions)
+                       clarify.guide(q, "machine_id") if stuck else q, versions)
     if not symptom:
+        q = f"What's the problem with {machine_id}?"
         return _result(machine_id, mvc_code, machine_status, None, True,
-                       f"What's the problem with {machine_id}?", versions)
+                       clarify.guide(q, "symptom") if stuck else q, versions)
 
     # Resolved -> Diagnosis.
     return _result(machine_id, mvc_code, machine_status, symptom, False, None, versions)

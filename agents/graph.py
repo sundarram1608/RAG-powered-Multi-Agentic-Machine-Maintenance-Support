@@ -23,6 +23,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # agents/ on path
+import clarify
 import config
 from state import State
 
@@ -57,7 +58,10 @@ async def intake_interrupt(state: dict) -> dict:
             return update
         working["user_input"] = interrupt(
             {"type": "clarify", "question": working.get("clarification_question")})
-    return update
+    # Re-ask cap hit and info still missing -> stop cleanly (route to output).
+    field = "machine_id" if not working.get("machine_id") else "symptom"
+    return {**update, "needs_clarification": False, "clarify_abandoned": True,
+            "final_response": clarify.give_up(field)}
 
 
 async def decider_interrupt(state: dict) -> dict:
@@ -98,7 +102,12 @@ async def manage_resolve_interrupt(state: dict) -> dict:
                 return {**update, "manage_plan": plan, "action_result": {"action": "cancelled"}}
             return update   # approved -> manage_execute via the edge
         return update       # unsupported / done
-    return update
+    # Re-ask cap hit and still unresolved -> stop cleanly (unsupported routes to output).
+    act = (working.get("manage_plan") or {}).get("action")
+    field = "comment" if act in ("close", "update_comment") else "incident_id"
+    plan = {**(working.get("manage_plan") or {}), "action": "unsupported",
+            "plan_summary": clarify.give_up(field)}
+    return {**update, "manage_plan": plan}
 
 
 # ── conditional-edge routers (state -> next node name) ──
@@ -130,6 +139,11 @@ def route_after_analytics_execute(state):
 def route_after_manage_resolve(state):
     action = (state.get("manage_plan") or {}).get("action")
     return "output" if action in ("unsupported", "cancelled") else "manage_execute"
+
+
+def route_after_intake(state):
+    # clarify_abandoned (re-ask cap hit) -> output with the give-up message; else diagnose.
+    return "output" if state.get("clarify_abandoned") else "diagnosis"
 
 
 def route_after_verifier(state):
@@ -181,7 +195,7 @@ def build_graph() -> StateGraph:
     b.add_conditional_edges("manage_resolve", route_after_manage_resolve,
                             ["manage_execute", "output"])
     b.add_edge("manage_execute", "output")
-    b.add_edge("intake", "diagnosis")
+    b.add_conditional_edges("intake", route_after_intake, ["diagnosis", "output"])
     b.add_edge("diagnosis", "verifier")
     b.add_conditional_edges("verifier", route_after_verifier,
                             ["technician_action", "decider", "diagnosis"])

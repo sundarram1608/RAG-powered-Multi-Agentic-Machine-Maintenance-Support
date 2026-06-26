@@ -91,6 +91,8 @@ def output_node(state: dict) -> dict:
 
     if state.get("input_safe") is False:                       # refusal (templated)
         text = state.get("guard_reason") or "I can't help with that request."
+    elif state.get("clarify_abandoned"):                       # gave up after re-ask cap (templated)
+        text = state.get("final_response") or "I can't proceed without that information."
     elif intent == "general":                                  # LLM
         text = _llm("general", f"User question: {state.get('user_input', '')}")
     elif intent == "analytics":                                # LLM (exact quoting)

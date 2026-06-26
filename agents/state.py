@@ -32,6 +32,7 @@ class State(TypedDict, total=False):
     symptom: Optional[str]
     needs_clarification: bool
     clarification_question: Optional[str]
+    clarify_abandoned: bool                    # re-ask cap hit with info still missing -> stop cleanly
 
     # --- diagnosis ---
     retrieved_context: list                    # manual + safety chunks (cited)

@@ -36,6 +36,9 @@ Needs `GROQ_API_KEY` + `GOOGLE_API_KEY` in `.env` (plus `LANGSMITH_*` if tracing
    abandons the paused turn (starts a fresh thread) so you can ask something different.
    For a `manage_incident` action with no incident id, the agent **lists the open
    incidents to pick from** (say "mine" for your own, "closed"/"all" to widen).
+   If you answer a `clarify` question with "I don't know" / "I'm not sure", the agent
+   doesn't just repeat it — it explains **how to get the info** (e.g. where the machine
+   id is) and points to Cancel; after a few tries it stops with a clear message.
 
 ## Async bridge
 Streamlit is synchronous; the agent API is async, and the MCP client/graph must stay on

@@ -176,6 +176,8 @@ The plumbing every node stands on (no nodes yet):
 | [`schemas.py`](schemas.py) | Pydantic structured outputs (`GuardResult`, `Route`, `Intake`, `Diagnosis`, `Verdict`, `Decision`, `SqlPlan`, `SqlReview`, `ManagePlan`) |
 | [`llms.py`](llms.py) | `get_reasoner()` (Groq) · `get_judge()` (Gemini) — provider factory |
 | [`mcp_client.py`](mcp_client.py) | connect to both MCP servers; `get_all_tools()` + `tools_for(agent)` |
+| [`history.py`](history.py) | `format_recent(messages, n)` — recent-exchanges window for follow-up context |
+| [`clarify.py`](clarify.py) | `is_stuck()` / `guide()` / `give_up()` — guide a stuck user at clarify interrupts instead of re-asking |
 
 **Milestone test** (`python agents/mcp_client.py`, under a clearly-marked
 `MILESTONE TEST` header):
@@ -259,7 +261,7 @@ The plumbing every node stands on (no nodes yet):
 - **Input format** (state read): `user_input` (+ carried `machine_id`/`symptom` on resume).
 - **Output format** (Pydantic `Intake`, enriched) → state: `machine_id`, `mvc_code`, `machine_status`, `symptom`, `needs_clarification`, `clarification_question`; tags `prompt_versions["intake"]`.
 - **Routing:** `needs_clarification = True` → clarification interrupt (ask) → re-enter on reply (carries the part already gathered); `False` → **Diagnosis**.
-- **Edge cases:** missing machine id → ask which machine; unknown machine (`exists: False`) → ask to confirm the id; **Decommissioned** → ask if the machine number is correct (it's retired/not serviceable); missing symptom → ask what the problem is; **Under Maintenance / Idle** still proceed.
+- **Edge cases:** missing machine id → ask which machine; unknown machine (`exists: False`) → ask to confirm the id; **Decommissioned** → ask if the machine number is correct (it's retired/not serviceable); missing symptom → ask what the problem is; **Under Maintenance / Idle** still proceed. **Stuck user** ("I'm not sure" / "I don't know" — `clarify.is_stuck`) → don't repeat the question; explain *how to get* the info (machine id is on the asset label / maintenance log / ask a supervisor) and point to Cancel. After the re-ask cap, `clarify_abandoned` routes to **Output** with a clean give-up message instead of diagnosing with no machine.
 - **Prompt:** `prompts/intake.py` · v1.0.0.
 
 ### 7. Diagnosis Agent — `nodes/diagnosis.py`  ✅
@@ -372,7 +374,7 @@ are registered as thin **interrupt wrappers** around the plain, standalone-teste
 node functions — the wrappers add `interrupt()`; the agents' logic is unchanged.
 
 ### 2. Topology
-Compiled graph — **16 nodes** (14 agents + start/end), **27 edges**. Conditional
+Compiled graph — **16 nodes** (14 agents + start/end), **28 edges**. Conditional
 edges are labelled with their routing condition; unlabelled edges are
 unconditional. The four amber nodes pause for the user (LangGraph `interrupt()`).
 Regenerate the raw export any time with `python agents/graph.py`.
@@ -399,7 +401,8 @@ flowchart TD
     manage_resolve -->|approved| manage_execute[manage_execute]
     manage_execute --> output
 
-    intake --> diagnosis[diagnosis]
+    intake -->|resolved| diagnosis[diagnosis]
+    intake -->|can't get info| output
     diagnosis --> verifier[verifier]
     verifier -->|approved, needs technician| technician_action[technician_action]
     verifier -->|approved, operator-fixable| decider[decider]
@@ -423,7 +426,7 @@ at `output → END`**:
 - **general** → `output` (LLM writes a capability/greeting reply).
 - **analytics** → `analytics_generate → text_to_sql_reviewer → analytics_execute → output`, with two loops back to `analytics_generate` (reviewer-reject, db-error).
 - **manage_incident** → `manage_resolve` (interrupts for clarify / choose-technician / approve) → `manage_execute → output`.
-- **troubleshoot** → `intake` (interrupts to clarify machine/symptom) → `diagnosis → verifier`, then the `needs_technician` gate → `decider` / `technician_action`, and `self_action` (interrupts for the 2 buttons).
+- **troubleshoot** → `intake` (interrupts to clarify machine/symptom; if the user is stuck it guides them to the info, and after the re-ask cap routes to `output` with a give-up message) → `diagnosis → verifier`, then the `needs_technician` gate → `decider` / `technician_action`, and `self_action` (interrupts for the 2 buttons).
 
 ### 3. Conditional-edge functions (the routers)
 Each is a pure `state → next_node_name`:
@@ -434,6 +437,7 @@ Each is a pure `state → next_node_name`:
 | `route_after_supervisor` | `intent` → `intake` / `analytics_generate` / `manage_resolve` / `output` |
 | `route_after_reviewer` | `analytics_execute` if approved · `analytics_generate` if `attempts<3` · else `output` |
 | `route_after_analytics_execute` | `output` if `sql_result.ok` · `analytics_generate` if `attempts<3` · else `output` |
+| `route_after_intake` | `output` if `clarify_abandoned` (re-ask cap hit) else `diagnosis` |
 | `route_after_manage_resolve` | `output` if action ∈ {unsupported, cancelled} else `manage_execute` |
 | `route_after_verifier` | approved → (`technician_action` if `needs_technician` else `decider`); reject & `attempts<3` → `diagnosis`; else → `technician_action` |
 | `route_after_decider` | `self_action` if `decision_path=="self"` else `technician_action` |
