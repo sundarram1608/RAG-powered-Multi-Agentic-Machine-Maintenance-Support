@@ -183,7 +183,7 @@ The plumbing every node stands on (no nodes yet):
 | [`llms.py`](llms.py) | `get_reasoner()` (Groq) · `get_judge()` (Gemini) — provider factory |
 | [`mcp_client.py`](mcp_client.py) | connect to both MCP servers; `get_all_tools()` + `tools_for(agent)` |
 | [`history.py`](history.py) | `format_recent(messages, n)` — recent-exchanges window for follow-up context |
-| [`clarify.py`](clarify.py) | `is_stuck()` / `guide()` / `give_up()` — guide a stuck user at clarify interrupts instead of re-asking |
+| [`clarify.py`](clarify.py) | clarify-interrupt UX: `is_stuck()`/`guide()`/`give_up()` (guide a stuck user) + `is_bail()`/`bailed()` (stop cleanly on "ok"/"cancel"/topic pivot, never re-ask the same thing) |
 
 **Milestone test** (`python agents/mcp_client.py`, under a clearly-marked
 `MILESTONE TEST` header):
@@ -256,7 +256,7 @@ The plumbing every node stands on (no nodes yet):
 - **Availability rules live in the node** (not the prompt — the LLM has no live data): named-&-available → propose; named-unavailable **or** unnamed → present `list_available_technicians` and ask the manager to choose; the chosen tech is then booked. **Availability enforced** (no overload); **reassign auto-frees the prior slot** (`book_technician_slot`).
 - **Notifications:** close → operator; assign → technician **and** operator (`send_email`; `email_dry_run` flag for tests).
 - **Browse to pick (v1.3.0):** if no incident id is given, the node calls `list_incidents` and shows the **open incidents to choose from** (reply with an id); the user can say "mine" → filtered to the operator (`current_user_id`, reported-by **or** assigned), or "closed"/"all" to widen (closed rows also show the agent's root-cause/suggestion + what the technician did). The original intent ("update") is carried so the chosen id resumes correctly. Opening a *new* incident → redirected to troubleshoot.
-- **Edge cases:** no id → list incidents to pick (above); unknown id → clarify; **close requires a comment** → ask if missing (never invented); close an already-closed / assign to a closed incident → `unsupported`; reject at approval → no writes.
+- **Edge cases:** no id → list incidents to pick (above, as a table); unknown id → clarify; **close requires a comment** → ask if missing (never invented); close an already-closed / assign to a closed incident → `unsupported`; reject at approval → no writes. **In the browse picker** a reply is only treated as a refinement when it's an id or a short standalone filter (`mine`/`open`/`closed`/`all`) → re-list; a **bail** (`clarify.is_bail`: "ok"/"cancel"/"never mind") or a **topic pivot** (e.g. "I want to open a new incident") stops the picker cleanly (`clarify.bailed()`) instead of re-listing the same table.
 - **Prompt:** `prompts/manage_incident.py` · v1.3.0 (create-new → redirect; clarify asks all fields with examples; lists open incidents to pick when no id given).
 
 ### 6. Intake Agent — `nodes/intake.py`  ✅
@@ -267,7 +267,7 @@ The plumbing every node stands on (no nodes yet):
 - **Input format** (state read): `user_input` (+ carried `machine_id`/`symptom` on resume).
 - **Output format** (Pydantic `Intake`, enriched) → state: `machine_id`, `mvc_code`, `machine_status`, `symptom`, `needs_clarification`, `clarification_question`; tags `prompt_versions["intake"]`.
 - **Routing:** `needs_clarification = True` → clarification interrupt (ask) → re-enter on reply (carries the part already gathered); `False` → **Diagnosis**.
-- **Edge cases:** missing machine id → ask which machine; unknown machine (`exists: False`) → ask to confirm the id; **Decommissioned** → ask if the machine number is correct (it's retired/not serviceable); missing symptom → ask what the problem is; **Under Maintenance / Idle** still proceed. **Stuck user** ("I'm not sure" / "I don't know" — `clarify.is_stuck`) → don't repeat the question; explain *how to get* the info (machine id is on the asset label / maintenance log / ask a supervisor) and point to Cancel. After the re-ask cap, `clarify_abandoned` routes to **Output** with a clean give-up message instead of diagnosing with no machine.
+- **Edge cases:** missing machine id → ask which machine; unknown machine (`exists: False`) → ask to confirm the id; **Decommissioned** → ask if the machine number is correct (it's retired/not serviceable); missing symptom → ask what the problem is; **Under Maintenance / Idle** still proceed. **Stuck user** ("I'm not sure" / "I don't know" — `clarify.is_stuck`) → don't repeat the question; explain *how to get* the info (machine id is on the asset label / maintenance log / ask a supervisor) and point to Cancel. After the re-ask cap, `clarify_abandoned` routes to **Output** with a clean give-up message instead of diagnosing with no machine. A **bail** reply (`clarify.is_bail`: "ok"/"cancel"/"never mind") also stops the clarification cleanly rather than re-asking.
 - **Prompt:** `prompts/intake.py` · v1.0.0.
 
 ### 7. Diagnosis Agent — `nodes/diagnosis.py`  ✅

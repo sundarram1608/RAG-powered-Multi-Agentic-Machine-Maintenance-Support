@@ -56,8 +56,12 @@ async def intake_interrupt(state: dict) -> dict:
         working.update(update)
         if not update.get("needs_clarification"):
             return update
-        working["user_input"] = interrupt(
+        reply = interrupt(
             {"type": "clarify", "question": working.get("clarification_question")})
+        if clarify.is_bail(reply):     # "ok" / "cancel" / "never mind" -> stop, don't re-ask
+            return {**update, "needs_clarification": False, "clarify_abandoned": True,
+                    "final_response": clarify.bailed()}
+        working["user_input"] = reply
     # Re-ask cap hit and info still missing -> stop cleanly (route to output).
     field = "machine_id" if not working.get("machine_id") else "symptom"
     return {**update, "needs_clarification": False, "clarify_abandoned": True,
@@ -90,8 +94,13 @@ async def manage_resolve_interrupt(state: dict) -> dict:
         update = await manage_resolve(working)
         working.update(update)
         if update.get("needs_clarification"):
-            working["user_input"] = interrupt(
+            reply = interrupt(
                 {"type": "clarify", "question": working.get("clarification_question")})
+            if clarify.is_bail(reply):     # "ok" / "cancel" / "never mind" -> stop cleanly
+                plan = {**(working.get("manage_plan") or {}), "action": "cancelled"}
+                return {**update, "manage_plan": plan, "action_result": {"action": "cancelled"},
+                        "clarify_abandoned": True, "final_response": clarify.bailed()}
+            working["user_input"] = reply
             continue
         if working.get("requires_approval"):
             decision = interrupt({"type": "approve",

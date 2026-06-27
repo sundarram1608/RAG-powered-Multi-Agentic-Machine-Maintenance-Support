@@ -68,3 +68,24 @@ def give_up(field: str) -> str:
     tail = (" " + help_text) if help_text else ""
     return ("I'm sorry, I can't proceed without that information." + tail +
             " When you have it, just ask again and we'll pick up from there.")
+
+
+# A clarification reply that means "stop this / I'm done", not an answer. Anchored to
+# the WHOLE (trimmed) reply so a real answer that merely CONTAINS one of these words
+# (e.g. a symptom "the printer won't stop heating") is not misread as a bail.
+_BAIL_RE = re.compile(
+    r"^\s*(cancel( it| that)?|never\s*mind|nevermind|nvm|forget\s*(it|that|about\s*it)"
+    r"|stop( it| that)?|leave\s*it|drop\s*it|skip\s*it|no\s*thanks?|nothing( else)?"
+    r"|none|ok(ay)?|k|done|that'?s\s*(all|it)|that'?ll\s*be\s*all)\s*[.!]*\s*$",
+    re.I,
+)
+
+
+def is_bail(text: str) -> bool:
+    """True when a clarification reply means 'stop / I'm done', not an answer."""
+    return bool(_BAIL_RE.match((text or "").strip()))
+
+
+def bailed() -> str:
+    """Message shown when the user abandons a clarification (bail or topic pivot)."""
+    return "Okay — I've stopped that. What would you like to do next?"

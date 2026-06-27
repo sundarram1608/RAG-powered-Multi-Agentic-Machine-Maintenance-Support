@@ -39,6 +39,9 @@ Needs `GROQ_API_KEY` + `GOOGLE_API_KEY` in `.env` (plus `LANGSMITH_*` if tracing
    If you answer a `clarify` question with "I don't know" / "I'm not sure", the agent
    doesn't just repeat it — it explains **how to get the info** (e.g. where the machine
    id is) and points to Cancel; after a few tries it stops with a clear message.
+   Typing "ok" / "cancel" / "never mind", or a different request (e.g. "I want to open a
+   new incident"), **stops the clarification** instead of re-asking — your next message
+   then routes fresh.
 
 ## Async bridge
 Streamlit is synchronous; the agent API is async, and the MCP client/graph must stay on

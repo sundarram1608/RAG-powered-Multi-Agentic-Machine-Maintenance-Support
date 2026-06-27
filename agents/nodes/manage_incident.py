@@ -156,9 +156,20 @@ async def manage_resolve(state: dict) -> dict:
         if m:
             incident_id = m.group(0).lower()
             user_input = prior.get("original_request") or user_input   # re-infer the action from the original ask
-        else:   # a refinement ("mine", "closed", "show all") -> re-list
+        elif re.match(r"^\s*(show |list |only |just |the )?"
+                      r"(my|mine|my incidents|open|closed|resolved|all|open ones|closed ones)"
+                      r"\s*[.!]*\s*$", user_input, re.I):
+            # a SHORT, standalone refinement ("mine", "open", "closed", "all") -> re-list.
+            # Anchored so a sentence like "I want to OPEN a new incident" is NOT a filter.
             return await _browse_clarify(user_input, prior.get("original_request") or user_input,
                                          state, versions)
+        else:
+            # not an id and not a refinement (e.g. a new request) -> stop, don't re-list
+            # the same table; let the user restate (their next turn routes fresh).
+            plan = {**prior, "action": "cancelled"}
+            return {"manage_plan": plan, "action_result": {"action": "cancelled"},
+                    "clarify_abandoned": True, "final_response": clarify.bailed(),
+                    "prompt_versions": versions}
     else:
         # --- resolve the incident id (carried, else from the text) ---
         incident_id = prior.get("incident_id")
