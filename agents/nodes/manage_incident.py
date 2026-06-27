@@ -63,23 +63,37 @@ def _clarify(plan: dict, question: str, versions: dict) -> dict:
             "clarification_question": question, "prompt_versions": versions}
 
 
+def _md_cell(value) -> str:
+    """Sanitize a value for a Markdown table cell (no pipes / newlines breaking it)."""
+    s = str(value if value is not None else "—").replace("\n", " ").replace("|", "\\|").strip()
+    return s or "—"
+
+
 def _format_incident_list(incidents: list, status: str, mine: bool) -> str:
     scope = " you reported or are assigned to" if mine else ""
     if not incidents:
         return (f"I couldn't find any {status} incidents{scope}. You can give an id "
                 "(e.g. inc_26), say 'all' / 'closed' to widen the search, or describe a "
                 "new fault to open one.")
-    lines = []
+    # Render as a Markdown table (the app shows clarify questions via st.markdown).
+    show_closed = any(it.get("status") == "closed" for it in incidents)
+    headers = ["Incident", "Machine", "Reported", "Complaint"]
+    if show_closed:                            # closed rows also carry the resolution
+        headers += ["Root cause", "Suggested", "Technician did"]
+    body = []
     for it in incidents:
-        line = f"• {it['incident_id']} — {it['machine_id']} — {(it.get('summary') or '').strip()[:70]}"
-        if it.get("status") == "closed":      # closed: show agent rc/suggestion + what the tech did
-            line += (f"\n    (agent root cause: {(it.get('agent_root_cause') or '—')[:60]}; "
-                     f"suggested: {(it.get('agent_suggested_action') or '—')[:50]}; "
-                     f"technician did: {(it.get('technician_action') or '—')[:50]})")
-        lines.append(line)
+        cells = [it.get("incident_id"), it.get("machine_id"),
+                 it.get("reported_date"), it.get("summary")]
+        if show_closed:
+            cells += [it.get("agent_root_cause"), it.get("agent_suggested_action"),
+                      it.get("technician_action")]
+        body.append("| " + " | ".join(_md_cell(c) for c in cells) + " |")
+    table = ("| " + " | ".join(headers) + " |\n"
+             "| " + " | ".join("---" for _ in headers) + " |\n"
+             + "\n".join(body))
     tip = "Reply with an id (e.g. inc_22)" + ("." if mine else ", or say 'mine' / 'closed' to filter.")
     return (f"Which incident would you like to act on? Here are the {status} "
-            f"incidents{scope}:\n" + "\n".join(lines) + "\n\n" + tip)
+            f"incidents{scope}:\n\n" + table + "\n\n" + tip)
 
 
 async def _browse_clarify(request_text: str, original_request: str, state: dict, versions: dict) -> dict:
