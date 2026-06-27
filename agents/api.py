@@ -89,3 +89,44 @@ async def resume_turn(thread_id: str, value, turn_id: str = None, user_id: str =
         return _error_result(e, turn_id, run_id)
     obs.enrich_run(run_id, meta, result)
     return _interpret(result, turn_id, run_id)
+
+
+# ── streaming variants (Phase 6b) — same contract, but yield per-node progress ──
+# Each yields {"type": "progress", "node": <name>} as the graph runs, then a final
+# {"type": "result", **<same dict as start_turn/resume_turn>}. The graph is streamed
+# with stream_mode="updates" (one {node: state-delta} chunk per node; an interrupt
+# arrives as a {"__interrupt__": (...)} chunk). Deltas are accumulated into `result`
+# so the existing _interpret handles answer-vs-interrupt unchanged.
+
+async def _astream(graph_input, thread_id, user_id, meta_value, run_name, turn_id):
+    turn_id = turn_id or obs.new_turn_id()
+    cfg, run_id, meta = obs.make_config(
+        thread_id, user_id, meta_value, turn_id=turn_id, run_name=run_name)
+    result = {}
+    try:
+        async for chunk in app_graph.astream(graph_input, cfg, stream_mode="updates"):
+            for node, delta in chunk.items():
+                if node == "__interrupt__":
+                    result["__interrupt__"] = delta
+                elif isinstance(delta, dict):
+                    result.update(delta)
+                yield {"type": "progress", "node": node}
+    except Exception as e:
+        yield {"type": "result", **_error_result(e, turn_id, run_id)}
+        return
+    obs.enrich_run(run_id, meta, result)
+    yield {"type": "result", **_interpret(result, turn_id, run_id)}
+
+
+async def stream_turn(thread_id: str, user_id: str, message: str, turn_id: str = None):
+    async for ev in _astream(
+            {"user_input": message, "current_user_id": user_id,
+             "messages": [HumanMessage(content=message)]},
+            thread_id, user_id, message, "turn:start", turn_id):
+        yield ev
+
+
+async def stream_resume(thread_id: str, value, turn_id: str = None, user_id: str = None):
+    async for ev in _astream(
+            Command(resume=value), thread_id, user_id, str(value), "turn:resume", turn_id):
+        yield ev

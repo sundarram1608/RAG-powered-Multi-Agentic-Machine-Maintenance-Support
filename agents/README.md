@@ -70,7 +70,11 @@ boundary in [`api.py`](api.py):
 ```
 start_turn(thread_id, user_id, message) -> Result   # Result carries kind/content/turn_id/run_id
 resume_turn(thread_id, value)           -> Result   # answer a clarification / approve an action
+stream_turn(...) / stream_resume(...)   -> async-gen of {type:"progress",node} … {type:"result",**Result}
 ```
+The `stream_*` variants (Phase 6b) run `astream(stream_mode="updates")` and emit a
+per-node progress event then the same final `Result` — used by the app for a live
+status; `start_turn`/`resume_turn` (one-shot `ainvoke`) remain for non-streaming callers.
 - `thread_id` = one chat (memory + pause/resume via the checkpointer).
 - `user_id` = the logged-in operator's `employee_id` (drives `create_incident(reported_by=…)` and notifications — set from login, never asked in chat).
 - `interrupt()` points (Intake clarify, Decider choice, Technician-Action approval) surface as `needs_input`/`needs_approval`; the app renders a prompt / Approve-Reject and calls `resume_turn`.

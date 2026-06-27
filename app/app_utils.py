@@ -29,6 +29,41 @@ _BUTTONS = {
     "approve": [("✅ Approve", "approve"), ("✖ Reject", "reject")],
 }
 
+# graph node -> user-facing progress label (Phase 6b live streaming). Nodes without a
+# label (e.g. "__interrupt__") leave the status text unchanged.
+_NODE_LABELS = {
+    "input": "Checking your request…",
+    "supervisor": "Figuring out what you need…",
+    "intake": "Identifying the machine…",
+    "diagnosis": "Diagnosing the fault…",
+    "verifier": "Double-checking the diagnosis…",
+    "decider": "Preparing your options…",
+    "self_action": "Preparing your options…",
+    "technician_action": "Booking a technician…",
+    "analytics_generate": "Writing a query…",
+    "text_to_sql_reviewer": "Reviewing the query…",
+    "analytics_execute": "Fetching the data…",
+    "manage_resolve": "Looking up the incident…",
+    "manage_execute": "Applying the change…",
+    "output": "Writing the response…",
+}
+
+
+def _run_streamed(stream) -> dict:
+    """Drive a backend stream: update a live status per node, return the result event."""
+    result = None
+    with st.status("Working…", expanded=False) as status:
+        for ev in stream:
+            if ev.get("type") == "progress":
+                label = _NODE_LABELS.get(ev.get("node"))
+                if label:
+                    status.update(label=label)
+            elif ev.get("type") == "result":
+                result = ev
+        status.update(label="Done", state="complete")
+    return result or {"kind": "error",
+                      "content": "⚠️ Sorry — something went wrong. Please try again."}
+
 
 def init_session_state() -> None:
     st.session_state.setdefault("messages", [])
@@ -102,12 +137,12 @@ def handle_user_message(text) -> None:
     with st.chat_message(ROLE_USER):
         st.markdown(text)
     with st.chat_message(ROLE_ASSISTANT):
-        with st.spinner("Working…"):
-            if pending and pending["kind"] == "clarify":
-                res = backend.resume_turn(st.session_state.thread_id, text,
-                                          pending["turn_id"], st.session_state.user_id)
-            else:
-                res = backend.start_turn(st.session_state.thread_id, st.session_state.user_id, text)
+        if pending and pending["kind"] == "clarify":
+            stream = backend.stream_resume(st.session_state.thread_id, text,
+                                           pending["turn_id"], st.session_state.user_id)
+        else:
+            stream = backend.stream_turn(st.session_state.thread_id, st.session_state.user_id, text)
+        res = _run_streamed(stream)
     _apply(res)
     # Re-render so the next interrupt's controls / chat-input placeholder reflect the
     # updated state immediately (otherwise they lag one run -> "submit twice").
@@ -125,9 +160,9 @@ def render_pending_controls() -> None:
         for col, (label, value) in zip(cols, _BUTTONS[pending["kind"]]):
             if col.button(label, key=f"{pending['kind']}:{value}:{pending['turn_id']}", use_container_width=True):
                 _append(ROLE_USER, label)
-                with st.spinner("Working…"):
-                    res = backend.resume_turn(st.session_state.thread_id, value,
-                                              pending["turn_id"], st.session_state.user_id)
+                with st.chat_message(ROLE_ASSISTANT):
+                    res = _run_streamed(backend.stream_resume(
+                        st.session_state.thread_id, value, pending["turn_id"], st.session_state.user_id))
                 _apply(res)
                 st.rerun()
     # escape hatch — abandon the pending interrupt and ask something else
