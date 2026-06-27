@@ -28,6 +28,11 @@ JUDGE_TEMPERATURE = 0.0
 # (over-capacity) and transient Gemini 429s. (A hard daily-quota 429 is not
 # retried away — it needs a higher-quota model/tier.)
 LLM_MAX_RETRIES = 5
+# The JUDGE (Gemini) has a cross-family fallback to Qwen-on-Groq, so when Gemini is
+# down (503 high-demand) we want to FAIL OVER FAST rather than retry a struggling
+# provider 5x per key (which made a turn hang for ~a minute). One quick retry, then
+# the _QuotaFailover chain advances to the next key / to Qwen.
+JUDGE_MAX_RETRIES = 1
 
 # Dataset reference "today" — must match the data layer's REFERENCE_TODAY
 # (seeded data is anchored to June 2026; the real date.today() is not used).

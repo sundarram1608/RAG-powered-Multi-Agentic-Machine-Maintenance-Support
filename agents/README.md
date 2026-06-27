@@ -114,9 +114,12 @@ Switching providers is a one-line change in `llms.py`. Keys: `GROQ_API_KEY`,
 add per-provider backup keys (see Resilience).
 
 **Resilience (free-tier reality).** Three layers, innermost first:
-1. **Retries** — every model sets `max_retries` (`config.LLM_MAX_RETRIES`) so the
-   provider SDK rides out transient `503` (Groq over-capacity, Gemini "high demand")
-   and transient `429`s with exponential backoff.
+1. **Retries** — every model sets `max_retries` so the provider SDK rides out
+   transient `503` / `429`s with exponential backoff. The reasoner + Qwen fallback use
+   `LLM_MAX_RETRIES` (5); the **Gemini judge uses `JUDGE_MAX_RETRIES` (1)** — because
+   it has a cross-family fallback, a Gemini "high demand" `503` should fail over to
+   Qwen-on-Groq FAST, not retry a struggling provider 5× per key (which made a
+   troubleshoot turn hang ~a minute at the Verifier).
 2. **Backup key (optional)** — if `GROQ_API_KEY_2` / `GOOGLE_API_KEY_2` is set, the
    factories build a `_QuotaFailover` chain (`get_reasoner`, `get_judge`,
    `get_judge_structured`): when the primary key returns a rate-limit / quota /

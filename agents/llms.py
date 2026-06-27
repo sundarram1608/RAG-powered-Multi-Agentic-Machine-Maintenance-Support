@@ -78,8 +78,10 @@ def _groq(model, api_key):
 
 
 def _gemini(model, api_key):
+    # Gemini is only ever the judge; fail fast (JUDGE_MAX_RETRIES) so a Gemini outage
+    # falls over to the Qwen-on-Groq candidate quickly instead of hanging on retries.
     return ChatGoogleGenerativeAI(model=model, temperature=config.JUDGE_TEMPERATURE,
-                                  max_retries=config.LLM_MAX_RETRIES, api_key=api_key)
+                                  max_retries=config.JUDGE_MAX_RETRIES, api_key=api_key)
 
 
 def _configure(model, structured, tools):
