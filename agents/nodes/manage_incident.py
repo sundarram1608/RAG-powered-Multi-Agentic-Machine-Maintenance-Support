@@ -39,6 +39,23 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 _INC_RE = re.compile(r"inc_\d+", re.IGNORECASE)
 _EMP_RE = re.compile(r"E\d+", re.IGNORECASE)
+# A referential mention of an incident with no explicit id ("the incident we booked",
+# "that one", "close it") -> resolve from the recently discussed incident in history.
+_REFERENTIAL_RE = re.compile(
+    r"\b(it|that|this|the\s+(one|incident|ticket)"
+    r"|we\s+(just\s+)?(booked|opened|created|logged|raised|made)"
+    r"|(recent|last|latest|previous)\s+(one|incident|ticket))\b", re.I)
+
+
+def _recent_incident_id(state: dict) -> str | None:
+    """The most recently mentioned incident id in the conversation history (e.g. the
+    'Logged as inc_29' reply), so a referential ask can be resolved without re-listing."""
+    found = None
+    for m in (state.get("messages") or []):
+        ids = _INC_RE.findall(getattr(m, "content", "") or "")
+        if ids:
+            found = ids[-1].lower()
+    return found
 
 
 async def _call(name: str, args: dict, expect_list: bool = False):
@@ -176,6 +193,9 @@ async def manage_resolve(state: dict) -> dict:
         if not incident_id:
             match = _INC_RE.search(user_input)
             incident_id = match.group(0).lower() if match else None
+        if not incident_id and _REFERENTIAL_RE.search(user_input or ""):
+            # "the incident we booked" / "close it" -> the one just discussed
+            incident_id = _recent_incident_id(state)
         if not incident_id:
             # "open / create / log / book a NEW incident" -> troubleshoot, not manage.
             if re.search(r"\b(new|open|create|raise|log|file|start|book)\b[\w\s,]*\bincident\b",
