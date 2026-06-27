@@ -290,7 +290,7 @@ FLUSH PRIVILEGES;
 ### `send_email(to_employee_id, incident_id, dry_run=False)`
 
 - **Purpose:** notify an employee about an incident, from **"Agentic FDM Services"**.
-- **What it does:** resolves the recipient's address **internally** from `employee_id`, picks the template by their **role** (operator = report confirmation incl. the allocated person's name; technician = work assignment; supervisor = escalation), fills it from the incident, and sends via Gmail SMTP.
+- **What it does:** resolves the recipient's address **internally** from `employee_id`, picks the template by their **role** + incident state (operator = report confirmation incl. the allocated person's name, **or a resolution notice with the work done if the incident is already closed**; technician = work assignment; supervisor = escalation), fills it from the incident, and sends via Gmail SMTP.
 - **Input:** `to_employee_id: str`, `incident_id: str`, `dry_run: bool = False` (set `True` to compose without sending).
 - **Output:** `{ok: True, dry_run: False, to_employee_id, role, subject, sent: True}` · `{ok: True, dry_run: True, …, subject, body}` · `{ok: False, error}`.
 - **Used by:** Action.

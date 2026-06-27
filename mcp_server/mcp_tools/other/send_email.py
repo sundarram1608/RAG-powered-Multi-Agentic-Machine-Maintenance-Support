@@ -46,7 +46,22 @@ def _compose(role: str, recipient_name: str, incident: dict, assignee: dict):
     fix = incident["agentic_resolution"]
     schedule = _schedule_text(incident)
 
-    if role == "Operator":
+    if role == "Operator" and incident.get("incident_closure_date"):
+        # The incident is closed -> a resolution notice, not a "logged" confirmation.
+        work_done = (incident.get("technician_comments") or "").strip() or "—"
+        subject = f"Your reported issue on {machine} has been resolved ({inc_id})"
+        body = (
+            f"Hi {recipient_name},\n"
+            f"Good news — the incident you reported has been resolved and closed.\n"
+            f"Incident : {inc_id}\n"
+            f"Machine : {machine}\n"
+            f"What you reported : {complaint}\n"
+            f"Work done : {work_done}\n"
+            f"Closed on : {incident['incident_closure_date']}\n\n"
+            f"Thanks for reporting it.\n"
+            f"— Agentic FDM Services"
+        )
+    elif role == "Operator":
         subject = f"Your reported issue on {machine} has been logged ({inc_id})"
         if assignee:
             allocated = f"{assignee['role']} Allocated: {assignee['full_name']}"
@@ -101,8 +116,9 @@ def send_email(to_employee_id: str, incident_id: str, dry_run: bool = False) -> 
     Notify an employee about an incident by email, from "Agentic FDM Services". The
     recipient's address is resolved internally from their employee_id — it is
     NEVER passed in or returned (PII). The message content is chosen automatically
-    from the recipient's role (operator = report confirmation; technician = work
-    assignment; supervisor = escalation) and filled from the incident record.
+    from the recipient's role (operator = report confirmation, or a resolution notice
+    if the incident is already closed; technician = work assignment; supervisor =
+    escalation) and filled from the incident record.
 
     Args:
         to_employee_id: Who to notify, e.g. "E13". Their email is looked up internally.
@@ -131,7 +147,8 @@ def send_email(to_employee_id: str, incident_id: str, dry_run: bool = False) -> 
     inc = run_query(
         """
         SELECT incident_id, machine_id, user_complaint, agent_root_cause,
-               agentic_resolution, technician_id, work_date, work_slot
+               agentic_resolution, technician_id, work_date, work_slot,
+               incident_closure_date, technician_comments
         FROM incidents WHERE incident_id=%s
         """,
         (incident_id,),
@@ -140,6 +157,8 @@ def send_email(to_employee_id: str, incident_id: str, dry_run: bool = False) -> 
         return {"ok": False, "error": f"Unknown incident '{incident_id}'."}
     incident = inc[0]
     incident["work_date"] = str(incident["work_date"]) if incident["work_date"] else None
+    incident["incident_closure_date"] = (
+        str(incident["incident_closure_date"]) if incident["incident_closure_date"] else None)
 
     # Resolve the allocated person's name (for the operator template).
     assignee = None
