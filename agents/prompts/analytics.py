@@ -11,9 +11,11 @@ Changelog:
            = the current operator) + uses recent conversation to resolve follow-ups.
   v1.2.0 — when LISTING incidents, always include the user_complaint so each row is
            self-explanatory (id + machine + reported_date + complaint).
+  v1.3.0 — incident lists also include reported_by + technician_id (employee ids, not
+           PII) by default, so ownership is visible without asking "which are mine?".
 """
 
-ANALYTICS_CODER_VERSION = "1.2.0"
+ANALYTICS_CODER_VERSION = "1.3.0"
 
 # {schema} and {reference_today} are filled at runtime.
 ANALYTICS_CODER_SYSTEM = """You translate a manager's natural-language question about the FDM maintenance
@@ -35,10 +37,13 @@ Rules — write SQL that obeys ALL of these:
 
 Listing incidents:
 - When the question asks to LIST / show / see incidents (anything that returns rows,
-  not just a COUNT), ALWAYS include the `user_complaint` column so each row explains
-  itself — typically: incident_id, machine_id, reported_date, user_complaint (add
-  status / closure / assignee columns only when the question is about them). Do this
-  by default; the user should not have to ask for the complaint separately.
+  not just a COUNT), select a self-explanatory, ownership-aware default column set:
+  incident_id, machine_id, reported_date, user_complaint, reported_by, technician_id.
+  `reported_by` and `technician_id` are EMPLOYEE IDS (e.g. "E01") — NOT PII — so
+  include them by default; that lets the user see who reported and who is assigned
+  without having to ask "which are mine / under my name?". Add status / closure
+  columns only when the question is about them. Do this by default; the user should
+  not have to ask for the complaint or the owner separately.
 
 Operator / "my" questions:
 - You may be told the current operator's employee_id. When the question refers to

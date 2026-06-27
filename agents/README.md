@@ -232,7 +232,7 @@ The plumbing every node stands on (no nodes yet):
 - **Output format** (Pydantic `SqlPlan` via `with_structured_output`) → state `sql_plan`, `analytics_attempts`; execute → `sql_result`; tags `prompt_versions["analytics"]`.
 - **Schema grounding:** the prompt is filled with `get_schema_context()` (from `schema_metadata.json`) + `REFERENCE_TODAY` (`2026-06-16`) so date logic matches the dataset.
 - **Edge cases:** reviewer-reject or DB-error → regenerate with the critique (capped at `ANALYTICS_MAX_ATTEMPTS = 3`); never selects `phone`; empty result → handled by Output ("no matching records"); results auto-capped at 200 rows.
-- **Prompt:** `prompts/analytics.py` (`ANALYTICS_CODER_SYSTEM`) · v1.2.0 (operator-aware "my/mine"; follow-ups; incident lists include the complaint by default).
+- **Prompt:** `prompts/analytics.py` (`ANALYTICS_CODER_SYSTEM`) · v1.3.0 (operator-aware "my/mine"; follow-ups; incident lists include complaint + reported_by/technician_id by default).
 
 ### 4. Text-to-SQL Reviewer — `nodes/text_to_sql_reviewer.py`  ✅
 - **Purpose:** judge the generated SQL **before** it runs — the *semantic* layer of a 3-layer defense (reviewer = grounded/relevant/safe; `validate_select_sql` = mechanical; `maint_readonly` = DB enforcement).
@@ -346,7 +346,7 @@ The plumbing every node stands on (no nodes yet):
 - **PII scrub:** regex strips any email / 7+-digit phone from the final text (belt-and-suspenders; tools already keep PII out of state).
 - **Verifier exhaustion:** routed to Technician Action (auto-dispatch); Output states a technician will assess it (no apologetic caveat).
 - **Edge cases:** empty analytics result → "no matching records"; `error` action → generic apology. Systematic faithfulness eval deferred to Phase 5.
-- **Prompt:** `prompts/output.py` · v1.3.0 (general + analytics; analytics renders multi-row results as a table — incident tables keep the complaint column).
+- **Prompt:** `prompts/output.py` · v1.4.0 (general + analytics; analytics multi-row -> table; incident tables include complaint + reporter/assignee employee-id columns).
 
 ## Graph assembly (Phase 4c)
 
