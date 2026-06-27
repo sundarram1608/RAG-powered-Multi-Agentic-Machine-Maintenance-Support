@@ -60,9 +60,29 @@ RATE_LIMIT_HINTS = (
 
 
 def is_rate_limit_error(exc: BaseException) -> bool:
-    """True if `exc` looks like a quota/rate/capacity error (see RATE_LIMIT_HINTS)."""
+    """True if `exc` looks like a quota/rate/capacity error (see RATE_LIMIT_HINTS).
+    Used for the user-facing "free-tier limit" message — keep it quota-specific."""
     s = str(exc).lower()
     return any(h in s for h in RATE_LIMIT_HINTS)
+
+
+# Transient network/connection blips — also infra failures (not request/validation
+# bugs), so the judge should fail over to its backup on these too. Kept SEPARATE from
+# RATE_LIMIT_HINTS so the "free-tier limit" message stays accurate (a timeout is not a cap).
+CONNECTION_HINTS = (
+    "connection", "connecterror", "timeout", "timed out", "remote disconnected",
+    "connection reset", "connection aborted", "temporarily unavailable", "network",
+    "max retries exceeded", "eof occurred", "server disconnected", "read timed out",
+)
+
+
+def is_transient_error(exc: BaseException) -> bool:
+    """True for any transient infra failure worth failing over on — a rate/quota/
+    capacity error OR a connection/timeout blip. NOT request/validation bugs."""
+    if is_rate_limit_error(exc):
+        return True
+    s = str(exc).lower()
+    return any(h in s for h in CONNECTION_HINTS)
 
 # ── MCP servers (the agents connect to BOTH at once) ──
 #   local_data : stdio  — auto-spawned; the 13 read/RAG/write tools

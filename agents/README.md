@@ -122,10 +122,13 @@ add per-provider backup keys (see Resilience).
    troubleshoot turn hang ~a minute at the Verifier).
 2. **Backup key (optional)** — if `GROQ_API_KEY_2` / `GOOGLE_API_KEY_2` is set, the
    factories build a `_QuotaFailover` chain (`get_reasoner`, `get_judge`,
-   `get_judge_structured`): when the primary key returns a rate-limit / quota /
-   capacity error (`config.is_rate_limit_error`), the next key is tried. It does
-   **not** fail over on request/validation bugs (those surface immediately). With no
-   secondary key set, the factory returns the bare model — identical to before.
+   `get_judge_structured`): when the primary returns a **transient** error
+   (`config.is_transient_error` — rate-limit / quota / capacity, or a connection /
+   timeout blip), the next candidate is tried. It does **not** fail over on
+   request/validation bugs (those surface immediately). With no secondary key set, the
+   factory returns the bare model — identical to before. *(The "free-tier limit"
+   message in `api.py` uses the narrower `is_rate_limit_error`, so a timeout isn't
+   mislabeled as a cap.)*
    *(Groq's token cap is per-account, so a 2nd Groq key from the same account shares
    that cap; real headroom needs a separate account.)*
 3. **Cross-family judge fallback** — `get_judge_structured()` keeps Gemini primary

@@ -31,10 +31,11 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 
 
 class _QuotaFailover(Runnable):
-    """Try each runnable in order; advance to the next ONLY on a rate-limit/quota/
-    capacity error (config.is_rate_limit_error). Any other error is re-raised at
-    once. If every candidate is rate-limited, the last error propagates (so api.py
-    can show the friendly "free-tier limit" message)."""
+    """Try each runnable in order; advance to the next ONLY on a TRANSIENT infra error
+    (config.is_transient_error — rate-limit / quota / capacity, or a connection /
+    timeout blip). Any other error (e.g. a request/validation bug) is re-raised at
+    once. If every candidate fails transiently, the last error propagates (so api.py
+    can show the friendly message)."""
 
     def __init__(self, candidates):
         self._candidates = candidates
@@ -46,7 +47,7 @@ class _QuotaFailover(Runnable):
                 return invoke_one(cand)
             except Exception as e:           # noqa: BLE001 — classify, then re-raise or fail over
                 is_last = i == len(self._candidates) - 1
-                if is_last or not config.is_rate_limit_error(e):
+                if is_last or not config.is_transient_error(e):
                     raise
                 last = e
         raise last                            # unreachable (loop returns or raises)
@@ -61,7 +62,7 @@ class _QuotaFailover(Runnable):
                 return await cand.ainvoke(input, config, **kwargs)
             except Exception as e:
                 is_last = i == len(self._candidates) - 1
-                if is_last or not config.is_rate_limit_error(e):
+                if is_last or not config.is_transient_error(e):
                     raise
                 last = e
         raise last
