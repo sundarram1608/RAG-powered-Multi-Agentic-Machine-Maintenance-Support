@@ -14,29 +14,9 @@ stays short.
 
 import re
 
-# "I don't know" / "not sure" / "can't find" / "where/how do I ..." / "idk" ...
-# Note: the don't-patterns key off the literal "don't/dont/do not" — they deliberately
-# do NOT match "doesn't"/"won't", so a symptom reply ("the fan doesn't spin") is safe.
-_DONT = r"(?:do\s*n['’]?t|don['’]?t|dont|do\s+not)"
-_STUCK_RE = re.compile(
-    # "I don't know / have / remember / recall ..." (knowledge / possession sense)
-    rf"\b{_DONT}\s+(?:know|knw|have|remember|recall|get|see)\b"
-    # looser: "don't ... (the) machine / number / id / which" — catches the common
-    # elliptical "I dont the machine number" (verb dropped)
-    rf"|\b{_DONT}\b.{{0,24}}\b(?:machine|number|id|which one)\b"
-    r"|not\s+sure|no\s+idea|no\s+clue"
-    r"|can['’]?t\s+(?:find|remember|recall)"
-    r"|haven['’]?t\s+got"
-    r"|\bunsure\b|\bdunno\b|\bidk\b"
-    r"|where\s+(?:do|can|is|to)|how\s+(?:do|can|to)",
-    re.I,
-)
-
-
-def is_stuck(text: str) -> bool:
-    """True when the reply signals the user doesn't know / can't find the answer."""
-    return bool(_STUCK_RE.search(text or ""))
-
+# NOTE: "stuck" detection ("I don't know") is now LLM-judged at the agents (Intake's
+# `user_stuck` flag, Manage's NoteReply), so there's no regex `is_stuck` here — only the
+# guidance text + the cheap `is_bail` fast-path remain.
 
 # How to obtain each piece of info we ask for (user-facing guidance).
 HELP = {

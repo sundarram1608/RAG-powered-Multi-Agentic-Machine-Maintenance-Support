@@ -33,8 +33,8 @@ import config
 import history
 import mcp_client
 from llms import get_reasoner
-from schemas import ClarifyReply, ManagePlan
-from prompts.clarify_interp import CLARIFY_INTERP_SYSTEM
+from schemas import ClarifyReply, ManagePlan, NoteReply, TechPick
+from prompts.clarify_interp import CLARIFY_INTERP_SYSTEM, NOTE_REPLY_SYSTEM, TECH_PICK_SYSTEM
 from prompts.manage_incident import MANAGE_RESOLVE_SYSTEM, MANAGE_RESOLVE_VERSION
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -62,6 +62,27 @@ async def _interpret_reply(user_input: str, state: dict, open_incidents: list | 
              f"Operator reply: {user_input}")
     return get_reasoner(structured=ClarifyReply).invoke(
         [SystemMessage(content=CLARIFY_INTERP_SYSTEM), HumanMessage(content=human)])
+
+
+async def _interpret_tech(user_input: str, available: list) -> TechPick:
+    """Which technician to assign — hybrid: regex for an explicit E## id, else the LLM
+    resolves a slot/date reference or 'whoever's free' against the available list."""
+    m = _EMP_RE.search(user_input or "")
+    if m:
+        return TechPick(target="technician", employee_id=m.group(0).upper())
+    if clarify.is_bail(user_input):
+        return TechPick(target="cancel")
+    human = f"Available technicians: {_fmt(available)}\n\nOperator reply: {user_input}"
+    return get_reasoner(structured=TechPick).invoke(
+        [SystemMessage(content=TECH_PICK_SYSTEM), HumanMessage(content=human)])
+
+
+async def _interpret_note(user_input: str) -> NoteReply:
+    """Is the reply a real work-done note, or a 'don't know'? LLM-judged (the caller
+    handles an obvious bail via is_bail before calling)."""
+    return get_reasoner(structured=NoteReply).invoke(
+        [SystemMessage(content=NOTE_REPLY_SYSTEM),
+         HumanMessage(content=f"Operator reply: {user_input}")])
 
 
 async def _call(name: str, args: dict, expect_list: bool = False):
@@ -147,40 +168,52 @@ async def manage_resolve(state: dict) -> dict:
     versions["manage_incident"] = MANAGE_RESOLVE_VERSION
     prior = state.get("manage_plan") or {}
 
+    def _cancelled(base: dict) -> dict:
+        return {"manage_plan": {**base, "action": "cancelled"},
+                "action_result": {"action": "cancelled"}, "clarify_abandoned": True,
+                "final_response": clarify.bailed(), "prompt_versions": versions}
+
+    def _assigned(named, t):
+        plan = {**prior, "named_employee": named, "assign_target": t, "needs_clarification": False,
+                "plan_summary": f"Assign {named} ({t['date']} {t['availability_slot']}) "
+                                f"to {prior['incident_id']}.", "requires_approval": True}
+        return {"manage_plan": plan, "requires_approval": True, "prompt_versions": versions}
+
     # --- resume: we previously asked the manager to choose a technician ---
     if prior.get("action") == "assign" and prior.get("needs_clarification"):
-        m = _EMP_RE.search(user_input)
-        if m:
-            named = m.group(0).upper()
+        available = await _list_techs()
+        pick = await _interpret_tech(user_input, available)
+        if pick.target == "cancel":
+            return _cancelled(prior)
+        if pick.target == "technician" and pick.employee_id:
+            named = pick.employee_id
             avail = await _list_techs(named)
             if avail:
-                t = avail[0]
-                plan = {**prior, "named_employee": named, "assign_target": t,
-                        "needs_clarification": False,
-                        "plan_summary": f"Assign {named} ({t['date']} {t['availability_slot']}) "
-                                        f"to {prior['incident_id']}.", "requires_approval": True}
-                return {"manage_plan": plan, "requires_approval": True, "prompt_versions": versions}
-            all_av = await _list_techs()
+                return _assigned(named, avail[0])
             return _clarify({**prior, "named_employee": named},
-                            f"{named} has no free slot. Available: {_fmt(all_av)}. "
+                            f"{named} has no free slot. Available: {_fmt(available)}. "
                             f"Which should I assign?", versions)
+        # "any" / no preference -> the first available technician
+        if available:
+            return _assigned(available[0]["employee_id"], available[0])
+        pd = {**prior, "action": "unsupported",
+              "plan_summary": "No technicians are currently available to assign."}
+        return {"manage_plan": pd, "prompt_versions": versions}
 
     # --- resume: we previously asked for a closing / update note ---
     if prior.get("needs_clarification") and prior.get("action") in ("close", "update_comment"):
-        comment = user_input.strip()
-        if clarify.is_stuck(comment):     # don't record "I don't know" as the note — guide instead
+        if clarify.is_bail(user_input):            # "never mind" mid-note -> stop the action
+            return _cancelled(prior)
+        nr = await _interpret_note(user_input)     # real note vs "I don't know" (LLM-judged)
+        if not nr.provided:
             q = prior.get("question") or "What was done or found?"
             return _clarify(prior, clarify.guide(q, "comment"), versions)
+        comment = (nr.note or user_input).strip()
         verb = "Close" if prior["action"] == "close" else "Update"
         pd = {**prior, "comment": comment, "needs_clarification": False, "question": None,
               "requires_approval": True,
               "plan_summary": f"{verb} incident {prior['incident_id']} with the note: \"{comment}\"."}
         return {"manage_plan": pd, "requires_approval": True, "prompt_versions": versions}
-
-    def _cancelled(base: dict) -> dict:
-        return {"manage_plan": {**base, "action": "cancelled"},
-                "action_result": {"action": "cancelled"}, "clarify_abandoned": True,
-                "final_response": clarify.bailed(), "prompt_versions": versions}
 
     # --- resume: we previously listed incidents and asked the user to pick one ---
     if prior.get("browsing") and prior.get("needs_clarification"):

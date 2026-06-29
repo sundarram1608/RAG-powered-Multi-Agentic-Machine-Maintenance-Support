@@ -188,7 +188,7 @@ The plumbing every node stands on (no nodes yet):
 | [`llms.py`](llms.py) | `get_reasoner()` (Groq) · `get_judge()` (Gemini) — provider factory |
 | [`mcp_client.py`](mcp_client.py) | connect to both MCP servers; `get_all_tools()` + `tools_for(agent)` |
 | [`history.py`](history.py) | `format_recent(messages, n)` — recent-exchanges window for follow-up context |
-| [`clarify.py`](clarify.py) | clarify-interrupt UX: `is_stuck()`/`guide()`/`give_up()` (guide a stuck user) + `is_bail()`/`bailed()` (stop cleanly on "ok"/"cancel"/topic pivot, never re-ask the same thing) |
+| [`clarify.py`](clarify.py) | clarify-interrupt UX helpers: `guide()`/`give_up()` (how-to-find-it text when a user is stuck) + `is_bail()`/`bailed()` (cheap fast-path to stop on obvious "ok"/"cancel"). Intent itself (stuck / which-incident / which-tech / note) is LLM-judged at the agents. |
 
 **Milestone test** (`python agents/mcp_client.py`, under a clearly-marked
 `MILESTONE TEST` header):

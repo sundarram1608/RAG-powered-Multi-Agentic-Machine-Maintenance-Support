@@ -103,6 +103,24 @@ class ClarifyReply(BaseModel):
                     "e.g. 'which are mine', 'under my name'.")
 
 
+class TechPick(BaseModel):
+    """Manage Incident — interpret WHICH technician to assign, from the available list."""
+    target: Literal["technician", "any", "cancel"] = Field(
+        description="technician = a specific available technician (give employee_id); "
+                    "any = no preference / 'whoever is free' (assign the first available); "
+                    "cancel = stopping or asking something unrelated.")
+    employee_id: Optional[str] = Field(default=None,
+        description="When target=technician: the chosen technician's employee_id from the available "
+                    "list, resolved from an explicit id (E05) or a reference to a listed slot ('the "
+                    "morning one', 'the one on the 18th'). Null otherwise — never invent an id.")
+
+
+class NoteReply(BaseModel):
+    """Manage Incident — interpret a reply that should be the work-done note (close/update)."""
+    provided: bool = Field(description="True if the reply actually DESCRIBES what was done/found (a usable note); False if the user says they don't know, gives a non-answer, or asks something else.")
+    note: Optional[str] = Field(default=None, description="The work note in the user's words when provided=True; null otherwise.")
+
+
 class ManagePlan(BaseModel):
     """Manage Incident Agent (resolve) — the planned action on a known incident."""
     incident_id: Optional[str] = Field(default=None, description="The incident to act on, e.g. 'inc_26'.")
