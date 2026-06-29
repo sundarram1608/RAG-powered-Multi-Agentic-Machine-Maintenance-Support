@@ -64,11 +64,18 @@ async def intake_node(state: dict) -> dict:
         SystemMessage(content=INTAKE_SYSTEM),
         HumanMessage(content=human),
     ])
+
+    # The LLM read the reply's intent: bail / change-topic -> stop cleanly (the regex
+    # fast-path in the graph wrapper catches obvious "ok"/"cancel"; this catches the rest).
+    if extracted.user_quit:
+        return {"needs_clarification": False, "clarify_abandoned": True,
+                "final_response": clarify.bailed(), "prompt_versions": versions}
+
     machine_id = extracted.machine_id or carried_machine
     symptom = extracted.symptom or carried_symptom
     mvc_code = machine_status = None
 
-    stuck = clarify.is_stuck(user_input)
+    stuck = extracted.user_stuck   # LLM-judged "I don't know" -> guide instead of re-asking
 
     # Validate the machine (resolve mvc_code/status) when one was given.
     if machine_id:

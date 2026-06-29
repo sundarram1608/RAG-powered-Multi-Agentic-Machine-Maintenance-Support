@@ -30,47 +30,38 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # agents/ on path
 import clarify
 import config
+import history
 import mcp_client
 from llms import get_reasoner
-from schemas import ManagePlan
+from schemas import ClarifyReply, ManagePlan
+from prompts.clarify_interp import CLARIFY_INTERP_SYSTEM
 from prompts.manage_incident import MANAGE_RESOLVE_SYSTEM, MANAGE_RESOLVE_VERSION
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
 _INC_RE = re.compile(r"inc_\d+", re.IGNORECASE)
 _EMP_RE = re.compile(r"E\d+", re.IGNORECASE)
-# A referential mention of an incident with no explicit id ("the booked incident",
-# "the incident we booked", "that one", "close it") -> resolve from the recently
-# discussed incident in history. The "the [adjective] incident" arm allows an optional
-# adjective (booked/opened/new/recent/…) between "the" and incident/one/ticket.
-_REFERENTIAL_RE = re.compile(
-    r"\bit\b|\bthat\b|\bthis\b"
-    r"|\bthe\s+(?:booked|opened|created|logged|raised|new|recent|last|latest|previous|same)?\s*"
-    r"(?:one|incident|ticket)s?\b"
-    r"|\bwe\s+(?:just\s+)?(?:booked|opened|created|logged|raised|made)\b"
-    r"|\b(?:recent|last|latest|previous)\s+(?:one|incident|ticket)s?\b", re.I)
 
 
-# A reply that REFINES the browse list, vs a pivot to a different request. The manage
-# picker is open-only (you act on open incidents), so the only real refinement is
-# "mine" — matched as a substring so natural phrasings work ("what is under my name",
-# "which are mine", "the ones I reported"). A bare "open" re-lists; it's anchored so
-# "open a new incident" (a pivot) is NOT treated as a filter.
-_REFINE_RE = re.compile(
-    r"\b(mine|my\s+(name|incidents?|tickets?|ones?)|under\s+my\s+name"
-    r"|assigned\s+to\s+me|reported\s+by\s+me|i\s+reported)\b", re.I)
-_OPEN_FILTER_RE = re.compile(r"^\s*(show |list |the )?open( ones| incidents)?\s*[.!]*\s*$", re.I)
-
-
-def _recent_incident_id(state: dict) -> str | None:
-    """The most recently mentioned incident id in the conversation history (e.g. the
-    'Logged as inc_29' reply), so a referential ask can be resolved without re-listing."""
-    found = None
-    for m in (state.get("messages") or []):
-        ids = _INC_RE.findall(getattr(m, "content", "") or "")
-        if ids:
-            found = ids[-1].lower()
-    return found
+async def _interpret_reply(user_input: str, state: dict, open_incidents: list | None) -> ClarifyReply:
+    """Decide what an operator's reply means when there's no clear incident id: a
+    specific incident (resolve its id from context/list), browse, or cancel. HYBRID —
+    cheap regex first (explicit id, obvious bail); the LLM (in conversation context)
+    handles everything else, so novel phrasings work without enumerating them."""
+    m = _INC_RE.search(user_input or "")
+    if m:                                   # explicit id -> no LLM needed
+        return ClarifyReply(target="incident", incident_id=m.group(0).lower())
+    if clarify.is_bail(user_input):         # obvious "ok"/"cancel"/"never mind"
+        return ClarifyReply(target="cancel")
+    context = history.format_recent(state.get("messages") or [], max_exchanges=5)
+    listing = "\n".join(
+        f"- {it['incident_id']}: {it.get('machine_id')} — {(it.get('summary') or '').strip()}"
+        for it in (open_incidents or []))
+    human = (f"Recent conversation:\n{context or '(none)'}\n\n"
+             f"Open incidents shown:\n{listing or '(none shown yet)'}\n\n"
+             f"Operator reply: {user_input}")
+    return get_reasoner(structured=ClarifyReply).invoke(
+        [SystemMessage(content=CLARIFY_INTERP_SYSTEM), HumanMessage(content=human)])
 
 
 async def _call(name: str, args: dict, expect_list: bool = False):
@@ -129,20 +120,25 @@ def _format_incident_list(incidents: list, status: str, mine: bool) -> str:
             f"incidents{scope}:\n\n" + table + "\n\n" + tip)
 
 
-async def _browse_clarify(request_text: str, original_request: str, state: dict, versions: dict) -> dict:
+async def _open_incidents(state: dict, mine: bool = False) -> list:
+    """Open incidents (optionally only the current operator's) — for the picker and for
+    giving the reply-interpreter the rows it can resolve a described pick against."""
+    employee_id = state.get("current_user_id") if mine else None
+    return await _call("list_incidents", {"status": "open", "employee_id": employee_id},
+                       expect_list=True)
+
+
+async def _browse_clarify(state: dict, versions: dict, original_request: str,
+                          mine: bool = False, incidents: list | None = None) -> dict:
     """List incidents for the user to pick one to ACT ON, and carry the ORIGINAL request
     so the chosen id resumes with the right intent. Always scoped to OPEN incidents:
     every manage action (close/assign/update) applies to an open incident — you can't
-    act on a closed one — so "all"/"closed" don't widen here (closed-incident history is
-    a read/analytics question). `mine` filters to the current operator."""
-    mine = bool(re.search(r"\b(my|mine|i reported|reported by me|assigned to me|under my name)\b",
-                          request_text, re.I))
-    status = "open"
-    employee_id = state.get("current_user_id") if mine else None
-    incidents = await _call("list_incidents",
-                            {"status": status, "employee_id": employee_id}, expect_list=True)
+    act on a closed one. `mine` filters to the current operator. Pass `incidents` to
+    reuse an already-fetched list."""
+    if incidents is None:
+        incidents = await _open_incidents(state, mine)
     plan = {"action": None, "browsing": True, "original_request": original_request}
-    return _clarify(plan, _format_incident_list(incidents, status, mine), versions)
+    return _clarify(plan, _format_incident_list(incidents, "open", mine), versions)
 
 
 async def manage_resolve(state: dict) -> dict:
@@ -181,33 +177,30 @@ async def manage_resolve(state: dict) -> dict:
               "plan_summary": f"{verb} incident {prior['incident_id']} with the note: \"{comment}\"."}
         return {"manage_plan": pd, "requires_approval": True, "prompt_versions": versions}
 
+    def _cancelled(base: dict) -> dict:
+        return {"manage_plan": {**base, "action": "cancelled"},
+                "action_result": {"action": "cancelled"}, "clarify_abandoned": True,
+                "final_response": clarify.bailed(), "prompt_versions": versions}
+
     # --- resume: we previously listed incidents and asked the user to pick one ---
     if prior.get("browsing") and prior.get("needs_clarification"):
-        m = _INC_RE.search(user_input)
-        if m:
-            incident_id = m.group(0).lower()
-            user_input = prior.get("original_request") or user_input   # re-infer the action from the original ask
-        elif _REFINE_RE.search(user_input) or _OPEN_FILTER_RE.match(user_input):
-            # a refinement ("mine" / "under my name" / "closed" / "all" / bare "open")
-            # -> re-list filtered. "open a new incident" is NOT a filter (a pivot).
-            return await _browse_clarify(user_input, prior.get("original_request") or user_input,
-                                         state, versions)
+        original = prior.get("original_request") or user_input
+        reply = await _interpret_reply(user_input, state, await _open_incidents(state))
+        if reply.target == "cancel":
+            return _cancelled(prior)                       # bail / pivot -> stop, don't re-list
+        if reply.target == "browse":
+            return await _browse_clarify(state, versions, original, mine=reply.mine)
+        if reply.target == "incident" and reply.incident_id:
+            incident_id = reply.incident_id
+            user_input = original                          # re-infer the action from the original ask
         else:
-            # not an id and not a refinement (e.g. a new request) -> stop, don't re-list
-            # the same table; let the user restate (their next turn routes fresh).
-            plan = {**prior, "action": "cancelled"}
-            return {"manage_plan": plan, "action_result": {"action": "cancelled"},
-                    "clarify_abandoned": True, "final_response": clarify.bailed(),
-                    "prompt_versions": versions}
+            return await _browse_clarify(state, versions, original)   # couldn't pin one -> re-list
     else:
-        # --- resolve the incident id (carried, else from the text) ---
+        # --- resolve the incident id (carried, explicit, or interpreted in context) ---
         incident_id = prior.get("incident_id")
         if not incident_id:
-            match = _INC_RE.search(user_input)
-            incident_id = match.group(0).lower() if match else None
-        if not incident_id and _REFERENTIAL_RE.search(user_input or ""):
-            # "the incident we booked" / "close it" -> the one just discussed
-            incident_id = _recent_incident_id(state)
+            m = _INC_RE.search(user_input)
+            incident_id = m.group(0).lower() if m else None
         if not incident_id:
             # "open / create / log / book a NEW incident" -> troubleshoot, not manage.
             if re.search(r"\b(new|open|create|raise|log|file|start|book)\b[\w\s,]*\bincident\b",
@@ -218,8 +211,15 @@ async def manage_resolve(state: dict) -> dict:
                                         "I'll diagnose it and log the incident for you. To edit an existing "
                                         "incident, give its id (e.g. inc_26)."}
                 return {"manage_plan": plan, "prompt_versions": versions}
-            # no id -> list incidents so the user can pick one (open by default)
-            return await _browse_clarify(user_input, user_input, state, versions)
+            # interpret in context: a referential/described mention -> resolve its id;
+            # a "show me" -> browse; a bail/pivot -> stop.
+            reply = await _interpret_reply(user_input, state, None)
+            if reply.target == "cancel":
+                return _cancelled({})
+            if reply.target == "incident" and reply.incident_id:
+                incident_id = reply.incident_id
+            else:
+                return await _browse_clarify(state, versions, user_input, mine=reply.mine)
 
     incident = await _call("get_incident", {"incident_id": incident_id})
     if not incident.get("exists"):

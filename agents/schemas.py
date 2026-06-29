@@ -37,6 +37,8 @@ class Intake(BaseModel):
     symptom: Optional[str] = Field(default=None, description="The user's confirmed problem/symptom in plain language.")
     needs_clarification: bool = Field(description="True if the machine id or symptom is missing, ambiguous, or the machine doesn't exist / is decommissioned.")
     question: Optional[str] = Field(default=None, description="The single clarifying question to ask the user when needs_clarification is True.")
+    user_stuck: bool = Field(default=False, description="True if the user's latest reply says they DON'T KNOW / can't find the asked-for info (e.g. 'I don't know the machine id', 'not sure', 'can't find it') — so we should explain how to get it rather than just re-ask.")
+    user_quit: bool = Field(default=False, description="True if the user's latest reply abandons this troubleshooting request — cancelling ('never mind', 'stop', 'cancel'), an acknowledgement that ends it ('ok', 'forget it'), or switching to an unrelated request. False for any reply that's still trying to answer.")
 
 
 class Diagnosis(BaseModel):
@@ -82,6 +84,23 @@ class SqlReview(BaseModel):
     safe: bool = Field(description="True if it is a single read-only SELECT/WITH, no writes/DDL/comments, and does not reference the phone column.")
     approved: bool = Field(description="True only if grounded AND relevant AND safe.")
     issues: List[str] = Field(default_factory=list, description="Specific, actionable problems for the coder to fix; empty if approved.")
+
+
+class ClarifyReply(BaseModel):
+    """Manage Incident — interpret an operator's free-text reply when they haven't given
+    a clear incident id (resolve referential/descriptive mentions from context). Used
+    only on the LLM-fallback path; explicit ids and obvious bails are caught by regex first."""
+    target: Literal["incident", "browse", "cancel"] = Field(
+        description="incident = they mean a SPECIFIC existing incident (give its id); "
+                    "browse = they want to see/list incidents to choose from; "
+                    "cancel = they're stopping, acknowledging, or asking for something unrelated.")
+    incident_id: Optional[str] = Field(default=None,
+        description="When target=incident: the incident id e.g. 'inc_31', resolved from an explicit id, "
+                    "a referential mention ('the booked incident', 'that one', 'close it') using the recent "
+                    "conversation, or a described row from the listed incidents. Null if you cannot pin one down.")
+    mine: bool = Field(default=False,
+        description="When target=browse: true if they want only THEIR incidents (reported by / assigned to them), "
+                    "e.g. 'which are mine', 'under my name'.")
 
 
 class ManagePlan(BaseModel):
