@@ -39,12 +39,16 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 _INC_RE = re.compile(r"inc_\d+", re.IGNORECASE)
 _EMP_RE = re.compile(r"E\d+", re.IGNORECASE)
-# A referential mention of an incident with no explicit id ("the incident we booked",
-# "that one", "close it") -> resolve from the recently discussed incident in history.
+# A referential mention of an incident with no explicit id ("the booked incident",
+# "the incident we booked", "that one", "close it") -> resolve from the recently
+# discussed incident in history. The "the [adjective] incident" arm allows an optional
+# adjective (booked/opened/new/recent/…) between "the" and incident/one/ticket.
 _REFERENTIAL_RE = re.compile(
-    r"\b(it|that|this|the\s+(one|incident|ticket)"
-    r"|we\s+(just\s+)?(booked|opened|created|logged|raised|made)"
-    r"|(recent|last|latest|previous)\s+(one|incident|ticket))\b", re.I)
+    r"\bit\b|\bthat\b|\bthis\b"
+    r"|\bthe\s+(?:booked|opened|created|logged|raised|new|recent|last|latest|previous|same)?\s*"
+    r"(?:one|incident|ticket)s?\b"
+    r"|\bwe\s+(?:just\s+)?(?:booked|opened|created|logged|raised|made)\b"
+    r"|\b(?:recent|last|latest|previous)\s+(?:one|incident|ticket)s?\b", re.I)
 
 
 # A reply that REFINES the browse list, vs a pivot to a different request. The manage
