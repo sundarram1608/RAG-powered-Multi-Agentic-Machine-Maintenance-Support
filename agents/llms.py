@@ -73,9 +73,12 @@ def _chain(candidates):
     return candidates[0] if len(candidates) == 1 else _QuotaFailover(candidates)
 
 
-def _groq(model, api_key):
+def _groq(model, api_key, retries=None):
+    # retries defaults to LLM_MAX_RETRIES (the reasoner rides out transient Groq blips);
+    # the Qwen JUDGE fallback passes JUDGE_MAX_RETRIES so the whole judge chain fails fast.
     return ChatGroq(model=model, temperature=config.REASONING_TEMPERATURE,
-                    max_retries=config.LLM_MAX_RETRIES, api_key=api_key)
+                    max_retries=config.LLM_MAX_RETRIES if retries is None else retries,
+                    api_key=api_key)
 
 
 def _gemini(model, api_key):
@@ -141,6 +144,7 @@ def get_judge_structured(schema):
         )
     candidates = [_gemini(config.JUDGE_MODEL, k).with_structured_output(schema)
                   for k in (config.GOOGLE_API_KEY, config.GOOGLE_API_KEY_2) if k]
-    candidates += [_groq(config.JUDGE_FALLBACK_MODEL, k).with_structured_output(schema)
+    candidates += [_groq(config.JUDGE_FALLBACK_MODEL, k,
+                         retries=config.JUDGE_MAX_RETRIES).with_structured_output(schema)
                    for k in (config.GROQ_API_KEY, config.GROQ_API_KEY_2) if k]
     return _chain(candidates)

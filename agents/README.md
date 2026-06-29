@@ -119,11 +119,12 @@ add per-provider backup keys (see Resilience).
 
 **Resilience (free-tier reality).** Three layers, innermost first:
 1. **Retries** — every model sets `max_retries` so the provider SDK rides out
-   transient `503` / `429`s with exponential backoff. The reasoner + Qwen fallback use
-   `LLM_MAX_RETRIES` (5); the **Gemini judge uses `JUDGE_MAX_RETRIES` (1)** — because
-   it has a cross-family fallback, a Gemini "high demand" `503` should fail over to
-   Qwen-on-Groq FAST, not retry a struggling provider 5× per key (which made a
-   troubleshoot turn hang ~a minute at the Verifier).
+   transient `503` / `429`s with exponential backoff. The **reasoner** uses
+   `LLM_MAX_RETRIES` (5) to ride out blips; the **whole judge chain** (Gemini *and* its
+   Qwen-on-Groq fallback) uses `JUDGE_MAX_RETRIES` (1) — every candidate has the next as
+   a backup, so each should fail FAST and advance rather than retry a struggling
+   provider 5× per key (which made the Verifier step hang when both providers were
+   throttled).
 2. **Backup key (optional)** — if `GROQ_API_KEY_2` / `GOOGLE_API_KEY_2` is set, the
    factories build a `_QuotaFailover` chain (`get_reasoner`, `get_judge`,
    `get_judge_structured`): when the primary returns a **transient** error
