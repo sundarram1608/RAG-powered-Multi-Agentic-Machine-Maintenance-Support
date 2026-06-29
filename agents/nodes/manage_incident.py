@@ -47,6 +47,16 @@ _REFERENTIAL_RE = re.compile(
     r"|(recent|last|latest|previous)\s+(one|incident|ticket))\b", re.I)
 
 
+# A reply that REFINES the browse list (a filter), vs a pivot to a different request.
+# "mine"/"under my name"/"closed"/"all" can appear mid-sentence ("what is under my
+# name") so they're a substring match; bare "open" is anchored so "open a new
+# incident" (a pivot) is NOT treated as the "open" filter.
+_REFINE_RE = re.compile(
+    r"\b(mine|my\s+(name|incidents?|tickets?|ones?)|under\s+my\s+name|assigned\s+to\s+me"
+    r"|reported\s+by\s+me|i\s+reported|closed|resolved|all|everything)\b", re.I)
+_OPEN_FILTER_RE = re.compile(r"^\s*(show |list |the )?open( ones| incidents)?\s*[.!]*\s*$", re.I)
+
+
 def _recent_incident_id(state: dict) -> str | None:
     """The most recently mentioned incident id in the conversation history (e.g. the
     'Logged as inc_29' reply), so a referential ask can be resolved without re-listing."""
@@ -94,12 +104,13 @@ def _format_incident_list(incidents: list, status: str, mine: bool) -> str:
                 "new fault to open one.")
     # Render as a Markdown table (the app shows clarify questions via st.markdown).
     show_closed = any(it.get("status") == "closed" for it in incidents)
-    headers = ["Incident", "Machine", "Reported", "Complaint"]
+    headers = ["Incident", "Machine", "Reported by", "Assigned to", "Reported", "Complaint"]
     if show_closed:                            # closed rows also carry the resolution
         headers += ["Root cause", "Suggested", "Technician did"]
     body = []
     for it in incidents:
         cells = [it.get("incident_id"), it.get("machine_id"),
+                 it.get("reported_by"), it.get("technician_id"),
                  it.get("reported_date"), it.get("summary")]
         if show_closed:
             cells += [it.get("agent_root_cause"), it.get("agent_suggested_action"),
@@ -173,11 +184,9 @@ async def manage_resolve(state: dict) -> dict:
         if m:
             incident_id = m.group(0).lower()
             user_input = prior.get("original_request") or user_input   # re-infer the action from the original ask
-        elif re.match(r"^\s*(show |list |only |just |the )?"
-                      r"(my|mine|my incidents|open|closed|resolved|all|open ones|closed ones)"
-                      r"\s*[.!]*\s*$", user_input, re.I):
-            # a SHORT, standalone refinement ("mine", "open", "closed", "all") -> re-list.
-            # Anchored so a sentence like "I want to OPEN a new incident" is NOT a filter.
+        elif _REFINE_RE.search(user_input) or _OPEN_FILTER_RE.match(user_input):
+            # a refinement ("mine" / "under my name" / "closed" / "all" / bare "open")
+            # -> re-list filtered. "open a new incident" is NOT a filter (a pivot).
             return await _browse_clarify(user_input, prior.get("original_request") or user_input,
                                          state, versions)
         else:

@@ -133,7 +133,7 @@ python mcp_server/server.py --selftest   # expect 14 stdio + 2 http tools
 - **Purpose:** browse incidents so a user can pick one to act on (used by Manage Incident when no id was given).
 - **What it does:** `SELECT … FROM incidents` filtered by status (`open` = `incident_closure_date IS NULL`; `closed`; `all`) and, if `employee_id` given, `reported_by = id OR technician_id = id` ("my incidents").
 - **Input:** `status: str = "open"` (`open`/`closed`/`all`); `employee_id: str | None` (e.g. `E01`).
-- **Output:** list of `{incident_id, machine_id, status, reported_date, summary}` (summary = the complaint). **Closed** items additionally include `{agent_root_cause, agent_suggested_action, technician_action}`. **No PII** — never `phone`/`email`; `reported_by`/`technician_id` are used to filter but not returned.
+- **Output:** list of `{incident_id, machine_id, status, reported_date, summary, reported_by, technician_id}` (summary = the complaint; `reported_by`/`technician_id` are employee_ids showing ownership, `technician_id` may be `None`). **Closed** items additionally include `{agent_root_cause, agent_suggested_action, technician_action}`. **No PII** — never `phone`/`email` (employee_ids are not PII).
 - **Used by:** Manage Incident (list open incidents to choose from; `employee_id` = the operator for "my incidents").
 - **Edge cases:** none match → empty list (the agent then suggests widening or describing a new fault).
 

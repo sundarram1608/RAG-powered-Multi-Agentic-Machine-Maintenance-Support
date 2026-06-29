@@ -29,9 +29,11 @@ def list_incidents(status: str = "open", employee_id: str | None = None) -> list
             this employee is the reporter OR the assigned technician ("my incidents").
 
     Returns:
-        A list of incidents (no PII — never phone/email). Each item:
-        {incident_id, machine_id, status: "open"|"closed", reported_date, summary}
-        where summary is the user's complaint. CLOSED incidents additionally include
+        A list of incidents (no PII — never phone/email; employee_ids are not PII).
+        Each item: {incident_id, machine_id, status: "open"|"closed", reported_date,
+        summary, reported_by, technician_id} where summary is the user's complaint and
+        reported_by / technician_id are the reporter / assigned-technician employee ids
+        (technician_id may be None). CLOSED incidents additionally include
         {agent_root_cause, agent_suggested_action, technician_action} so the user sees
         what the agent diagnosed/suggested and what the technician actually did.
     """
@@ -50,8 +52,8 @@ def list_incidents(status: str = "open", employee_id: str | None = None) -> list
     rows = run_query(
         f"""
         SELECT incident_id, machine_id, reported_date, user_complaint,
-               agent_root_cause, agentic_resolution, technician_comments,
-               incident_closure_date
+               reported_by, technician_id, agent_root_cause, agentic_resolution,
+               technician_comments, incident_closure_date
         FROM incidents{clause}
         ORDER BY incident_id
         """,
@@ -66,6 +68,8 @@ def list_incidents(status: str = "open", employee_id: str | None = None) -> list
             "status": "closed" if closed else "open",
             "reported_date": str(r["reported_date"]) if r["reported_date"] else None,
             "summary": r["user_complaint"],
+            "reported_by": r["reported_by"],      # employee id (not PII) — for ownership
+            "technician_id": r["technician_id"],  # assigned employee id, or None
         }
         if closed:
             item["agent_root_cause"] = r["agent_root_cause"]
