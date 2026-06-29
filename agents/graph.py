@@ -54,14 +54,13 @@ async def intake_interrupt(state: dict) -> dict:
     for _ in range(MAX_CLARIFY):
         update = await intake_node(working)
         working.update(update)
-        if not update.get("needs_clarification"):
-            return update
-        reply = interrupt(
+        if not update.get("needs_clarification") or update.get("clarify_abandoned"):
+            return update              # resolved, or the LLM judged user_quit -> stop
+        # No is_bail shortcut here: intake_node's LLM decides intent in context, so an
+        # acknowledgement ("ok"/"got it") CONTINUES (re-ask) and only an explicit
+        # cancel / topic-switch (user_quit) stops.
+        working["user_input"] = interrupt(
             {"type": "clarify", "question": working.get("clarification_question")})
-        if clarify.is_bail(reply):     # "ok" / "cancel" / "never mind" -> stop, don't re-ask
-            return {**update, "needs_clarification": False, "clarify_abandoned": True,
-                    "final_response": clarify.bailed()}
-        working["user_input"] = reply
     # Re-ask cap hit and info still missing -> stop cleanly (route to output).
     field = "machine_id" if not working.get("machine_id") else "symptom"
     return {**update, "needs_clarification": False, "clarify_abandoned": True,

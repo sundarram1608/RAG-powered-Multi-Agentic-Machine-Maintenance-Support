@@ -38,7 +38,7 @@ class Intake(BaseModel):
     needs_clarification: bool = Field(description="True if the machine id or symptom is missing, ambiguous, or the machine doesn't exist / is decommissioned.")
     question: Optional[str] = Field(default=None, description="The single clarifying question to ask the user when needs_clarification is True.")
     user_stuck: bool = Field(default=False, description="True if the user's latest reply says they DON'T KNOW / can't find the asked-for info (e.g. 'I don't know the machine id', 'not sure', 'can't find it') — so we should explain how to get it rather than just re-ask.")
-    user_quit: bool = Field(default=False, description="True if the user's latest reply abandons this troubleshooting request — cancelling ('never mind', 'stop', 'cancel'), an acknowledgement that ends it ('ok', 'forget it'), or switching to an unrelated request. False for any reply that's still trying to answer.")
+    user_quit: bool = Field(default=False, description="True ONLY if the reply ABANDONS this request — an explicit cancel ('never mind', 'stop', 'forget it', 'cancel') or switching to a clearly unrelated request. A bare ACKNOWLEDGEMENT ('ok', 'got it', 'thanks', 'sure', 'will do') is NOT a quit — the user is continuing and will give the machine/symptom next, so user_quit stays False.")
 
 
 class Diagnosis(BaseModel):
