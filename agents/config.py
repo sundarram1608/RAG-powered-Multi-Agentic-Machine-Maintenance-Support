@@ -24,10 +24,12 @@ JUDGE_FALLBACK_MODEL = "qwen/qwen3-32b"       # Groq — fallback judge when Gem
                                               # (transient 503/quota); a different family than the Llama reasoner
 REASONING_TEMPERATURE = 0.0
 JUDGE_TEMPERATURE = 0.0
-# Provider SDK retries with exponential backoff — absorbs transient Groq 503
-# (over-capacity) and transient Gemini 429s. (A hard daily-quota 429 is not
-# retried away — it needs a higher-quota model/tier.)
-LLM_MAX_RETRIES = 5
+# Per-key SDK retries (exponential backoff) for the reasoner. Kept LOW: 5 retries on a
+# hard daily-cap 429 is ~15s of pointless backoff per key (×2 keys with failover ≈ 30s
+# of "Working…") since a cap won't clear in seconds. 2 still smooths a transient 503
+# blip, and _QuotaFailover handles the rest (try the backup key, else error fast with
+# the friendly message). The judge chain fails even faster (JUDGE_MAX_RETRIES).
+LLM_MAX_RETRIES = 2
 # The JUDGE (Gemini) has a cross-family fallback to Qwen-on-Groq, so when Gemini is
 # down (503 high-demand) we want to FAIL OVER FAST rather than retry a struggling
 # provider 5x per key (which made a turn hang for ~a minute). One quick retry, then
