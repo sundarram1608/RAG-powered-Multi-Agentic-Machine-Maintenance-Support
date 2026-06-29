@@ -219,7 +219,7 @@ The plumbing every node stands on (no nodes yet):
 - **Output:** `{input_safe: bool, guard_reason: str, prompt_versions["input"]}`.
 - **Routing:** `input_safe = False` → **Output** (polite refusal carrying `guard_reason`); `True` → **Supervisor**.
 - **Edge cases:** instruction-override / "print your prompt" → `safe=False`; request for an employee's phone/email/credentials → `safe=False` (even when the topic is in-scope); off-domain question → `safe=False`; **operational actions** like "mark incident complete" / "book a technician" → `safe=True` (capability decided downstream); vague/ambiguous but on-topic → `safe=True` (clarified by later agents). **Moderate** strictness — only *clear* overrides/PII are blocked.
-- **Prompt:** `prompts/input.py` · v1.1.0 (context-aware: a brief follow-up referring to earlier in-scope content is in scope).
+- **Prompt:** `prompts/input.py` · v1.2.0 (context-aware follow-ups; farewells/sign-offs are benign small-talk not injection; judge the latest message on its own merits — a prior refusal doesn't taint the next).
 
 ### 2. Supervisor Agent — `nodes/supervisor.py`  ✅
 - **Purpose:** the intent router — classify the (already-guarded) turn into exactly one of four routes. Pure router; never answers or acts.
