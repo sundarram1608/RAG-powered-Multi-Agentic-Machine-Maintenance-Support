@@ -32,6 +32,7 @@ from nodes.supervisor import supervisor_node
 from nodes.analytics import analytics_generate, analytics_execute
 from nodes.text_to_sql_reviewer import text_to_sql_reviewer_node
 from nodes.manage_incident import manage_resolve, manage_execute
+from nodes.advice import advice_node
 from nodes.intake import intake_node
 from nodes.diagnosis import diagnosis_node
 from nodes.verifier import verifier_node
@@ -65,6 +66,19 @@ async def intake_interrupt(state: dict) -> dict:
     field = "machine_id" if not working.get("machine_id") else "symptom"
     return {**update, "needs_clarification": False, "clarify_abandoned": True,
             "final_response": clarify.give_up(field)}
+
+
+async def advice_interrupt(state: dict) -> dict:
+    working, update = dict(state), {}
+    for _ in range(MAX_CLARIFY):
+        update = await advice_node(working)
+        working.update(update)
+        if not update.get("needs_clarification"):
+            return update              # answer (-> output) or troubleshoot handoff (-> intake)
+        working["user_input"] = interrupt(
+            {"type": "clarify", "question": working.get("clarification_question")})
+    # Cap hit while still disambiguating -> just answer generally rather than loop.
+    return {**update, "advice_route": "answer", "needs_clarification": False}
 
 
 async def decider_interrupt(state: dict) -> dict:
@@ -125,9 +139,14 @@ def route_after_input(state):
 
 
 def route_after_supervisor(state):
-    return {"troubleshoot": "intake", "analytics": "analytics_generate",
+    return {"troubleshoot": "intake", "advice": "advice", "analytics": "analytics_generate",
             "manage_incident": "manage_resolve", "general": "output"
             }.get(state.get("intent"), "output")
+
+
+def route_after_advice(state):
+    # handoff to troubleshooting (user is facing it now) -> intake; else answer -> output.
+    return "intake" if state.get("advice_route") == "troubleshoot" else "output"
 
 
 def route_after_reviewer(state):
@@ -183,6 +202,7 @@ def build_graph() -> StateGraph:
     b.add_node("analytics_execute", analytics_execute)
     b.add_node("manage_resolve", manage_resolve_interrupt)
     b.add_node("manage_execute", manage_execute)
+    b.add_node("advice", advice_interrupt)
     b.add_node("intake", intake_interrupt)
     b.add_node("diagnosis", diagnosis_node)
     b.add_node("verifier", verifier_node)
@@ -194,7 +214,8 @@ def build_graph() -> StateGraph:
     b.add_edge(START, "input")
     b.add_conditional_edges("input", route_after_input, ["output", "supervisor"])
     b.add_conditional_edges("supervisor", route_after_supervisor,
-                            ["intake", "analytics_generate", "manage_resolve", "output"])
+                            ["intake", "advice", "analytics_generate", "manage_resolve", "output"])
+    b.add_conditional_edges("advice", route_after_advice, ["intake", "output"])
     b.add_edge("analytics_generate", "text_to_sql_reviewer")
     b.add_conditional_edges("text_to_sql_reviewer", route_after_reviewer,
                             ["analytics_execute", "analytics_generate", "output"])

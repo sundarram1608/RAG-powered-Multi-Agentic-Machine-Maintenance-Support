@@ -6,7 +6,7 @@ to troubleshoot FDM 3D-printer faults, answer analytics questions, and take
 actions (open incidents, book technicians, notify people) — with verification and
 human-in-the-loop before anything irreversible.
 
-> Build status: **Phase 4 ✅** — all 12 agents built + the compiled LangGraph
+> Build status: **Phase 4 ✅** — all 13 agents built + the compiled LangGraph
 > workflow (see the **Graph assembly (Phase 4c)** section for the embedded diagram).
 > (Project-wide: Phases 0–5 complete; the Streamlit app is Phase 6.)
 
@@ -38,7 +38,8 @@ human-in-the-loop before anything irreversible.
 | # | Agent | LLM | Tools | Role |
 |---|---|---|---|---|
 | 1 | **Input** | Llama | — | scope + prompt-injection / PII-request guard |
-| 2 | **Supervisor** | Llama | — | route: troubleshoot / analytics / manage_incident / general |
+| 2 | **Supervisor** | Llama | — | route: troubleshoot / advice / analytics / manage_incident / general |
+| 2b | **Advice** | Llama | `safety_retrieval` | general/preventive/how-to questions: answer (grounded) · ask "facing it now?" · hand off to troubleshoot |
 | 3 | **Analytics** | Llama | `run_readonly_query` | coder: NL → read-only SQL; executor: run approved SQL |
 | 4 | **Text-to-SQL Reviewer** | **Gemini** | — | judge the SQL: grounded / relevant / safe; loop back if not |
 | 5 | **Manage Incident** | Llama | `get_incident`, `list_incidents`, `list_available_technicians`, `find_available_technician`, `book_technician_slot`, `update_incident`, `send_email` | direct action on a KNOWN incident (close, assign/reassign, update) |
@@ -359,12 +360,12 @@ The plumbing every node stands on (no nodes yet):
 
 ## Graph assembly (Phase 4c)
 
-`graph.py` wires the 12 agents into one LangGraph `StateGraph`, compiled with a
+`graph.py` wires the 13 agents into one LangGraph `StateGraph`, compiled with a
 `MemorySaver` checkpointer. `api.py` is the thin boundary the app calls; `run.py`
 is a CLI driver. The shared scratchpad is `state.State` (a TypedDict); each node
 returns a partial update that LangGraph merges.
 
-### 1. Node inventory (12 agents → 14 graph nodes)
+### 1. Node inventory (13 agents → 15 graph nodes)
 A few agents are multi-step, so the graph has slightly more nodes than agents:
 
 | Graph node | From agent |
@@ -386,7 +387,7 @@ are registered as thin **interrupt wrappers** around the plain, standalone-teste
 node functions — the wrappers add `interrupt()`; the agents' logic is unchanged.
 
 ### 2. Topology
-Compiled graph — **16 nodes** (14 agents + start/end), **28 edges**. Conditional
+Compiled graph — **17 nodes** (15 agents + start/end), **31 edges**. Conditional
 edges are labelled with their routing condition; unlabelled edges are
 unconditional. The four amber nodes pause for the user (LangGraph `interrupt()`).
 Regenerate the raw export any time with `python agents/graph.py`.
@@ -400,7 +401,11 @@ flowchart TD
     supervisor -->|general| output
     supervisor -->|analytics| analytics_generate[analytics_generate]
     supervisor -->|manage_incident| manage_resolve[manage_resolve]
+    supervisor -->|advice| advice[advice]
     supervisor -->|troubleshoot| intake[intake]
+
+    advice -->|answer| output
+    advice -->|facing it now| intake
 
     analytics_generate --> text_to_sql_reviewer[text_to_sql_reviewer]
     text_to_sql_reviewer -->|approved| analytics_execute[analytics_execute]
@@ -430,12 +435,13 @@ flowchart TD
     output --> DONE([end])
 
     classDef interrupt fill:#FAEEDA,stroke:#BA7517,color:#412402;
-    class intake,decider,self_action,manage_resolve interrupt;
+    class intake,decider,self_action,manage_resolve,advice interrupt;
 ```
 
-Four sub-flows hang off the supervisor's 4-way route, and **everything converges
+Five sub-flows hang off the supervisor's route, and **everything converges
 at `output → END`**:
-- **general** → `output` (LLM writes a capability/greeting reply).
+- **general** → `output` (LLM writes a capability/greeting/farewell reply).
+- **advice** → `advice` (LLM triage: a general/preventive question → retrieve the safety guide → `output` answers in *advice* mode; if the reply is unclear it interrupts to ask "facing it now or just asking?"; if the user is actually facing the fault it hands off to `intake` → troubleshoot). No machine/incident.
 - **analytics** → `analytics_generate → text_to_sql_reviewer → analytics_execute → output`, with two loops back to `analytics_generate` (reviewer-reject, db-error).
 - **manage_incident** → `manage_resolve` (interrupts for clarify / choose-technician / approve) → `manage_execute → output`.
 - **troubleshoot** → `intake` (interrupts to clarify machine/symptom; if the user is stuck it guides them to the info, and after the re-ask cap routes to `output` with a give-up message) → `diagnosis → verifier`, then the `needs_technician` gate → `decider` / `technician_action`, and `self_action` (interrupts for the 2 buttons).
@@ -446,7 +452,8 @@ Each is a pure `state → next_node_name`:
 | Router | Decision |
 |---|---|
 | `route_after_input` | `output` if `input_safe is False` else `supervisor` |
-| `route_after_supervisor` | `intent` → `intake` / `analytics_generate` / `manage_resolve` / `output` |
+| `route_after_supervisor` | `intent` → `intake` / `advice` / `analytics_generate` / `manage_resolve` / `output` |
+| `route_after_advice` | `intake` if `advice_route=="troubleshoot"` (user is facing it now) else `output` (answer) |
 | `route_after_reviewer` | `analytics_execute` if approved · `analytics_generate` if `attempts<3` · else `output` |
 | `route_after_analytics_execute` | `output` if `sql_result.ok` · `analytics_generate` if `attempts<3` · else `output` |
 | `route_after_intake` | `output` if `clarify_abandoned` (re-ask cap hit) else `diagnosis` |

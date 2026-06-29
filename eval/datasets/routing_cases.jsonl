@@ -25,3 +25,7 @@
 {"id": "route_ts_extruder", "inputs": {"utterance": "the extruder on M01 is clicking and skipping"}, "reference": {"intent": "troubleshoot", "machine_id": "M01"}, "metadata": {"clear": true}}
 {"id": "route_open_incident_fault", "inputs": {"utterance": "can you open an incident for M03's hot bed not heating"}, "reference": {"intent": "troubleshoot", "machine_id": "M03"}, "metadata": {"boundary": true, "note": "opening a NEW incident for a fault -> troubleshoot (logs it), not manage"}}
 {"id": "route_book_incident", "inputs": {"utterance": "I'd like to book a new incident"}, "reference": {"intent": "troubleshoot"}, "metadata": {"boundary": true, "note": "creating an incident -> troubleshoot; intake will ask for machine + symptom"}}
+{"id": "route_advice_bed_rapid", "inputs": {"utterance": "I am not facing it now, just precautious \u2014 what should I do if the printer bed heats up very rapidly?"}, "reference": {"intent": "advice"}, "metadata": {"clear": true, "advisory": true}}
+{"id": "route_advice_prevent_clog", "inputs": {"utterance": "how do I prevent nozzle clogs?"}, "reference": {"intent": "advice"}, "metadata": {"clear": true, "advisory": true}}
+{"id": "route_advice_store_filament", "inputs": {"utterance": "whats the right way to store filament?"}, "reference": {"intent": "advice"}, "metadata": {"clear": true, "advisory": true}}
+{"id": "route_advice_ambiguous", "inputs": {"utterance": "the bed is heating up rapidly"}, "reference": {"intent": "advice"}, "metadata": {"clear": false, "note": "ambiguous facing-now vs asking -> advice confirms"}}

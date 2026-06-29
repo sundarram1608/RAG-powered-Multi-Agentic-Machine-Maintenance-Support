@@ -23,7 +23,11 @@ class State(TypedDict, total=False):
     guard_reason: str
 
     # --- routing ---
-    intent: str                                # troubleshoot | analytics | manage_incident | general
+    intent: str                                # troubleshoot | advice | analytics | manage_incident | general
+
+    # --- advice (general/preventive how-to) ---
+    advice_route: Optional[str]                # "answer" | "ask" | "troubleshoot" (handoff)
+    advice_topic: Optional[str]                # the maintenance topic, for retrieval + the answer
 
     # --- intake ---
     machine_id: Optional[str]

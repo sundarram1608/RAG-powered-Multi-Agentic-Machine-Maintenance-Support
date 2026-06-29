@@ -21,13 +21,31 @@ class GuardResult(BaseModel):
 
 class Route(BaseModel):
     """Supervisor Agent — intent routing."""
-    next: Literal["troubleshoot", "analytics", "manage_incident", "general"] = Field(
-        description="troubleshoot = a machine fault/symptom needing diagnosis; "
+    next: Literal["troubleshoot", "advice", "analytics", "manage_incident", "general"] = Field(
+        description="troubleshoot = the user is FACING a fault/symptom on a machine now and wants it "
+                    "diagnosed/fixed; "
+                    "advice = a general / preventive / how-to / hypothetical question about FDM "
+                    "maintenance NOT tied to a current fault ('what to do if the bed overheats?', "
+                    "'how do I prevent clogs?') — also use this when it's unclear whether they're "
+                    "facing the issue now or just asking; "
                     "analytics = a read-only question about existing data (counts, status, look-ups); "
                     "manage_incident = a direct action on a KNOWN incident/booking "
                     "(close/mark-complete, reassign, (re)book, update); "
-                    "general = capabilities / greeting / in-scope small talk.")
+                    "general = capabilities / greeting / farewell / in-scope small talk.")
     reason: str = Field(description="Brief reason for the chosen route.")
+
+
+class AdvicePlan(BaseModel):
+    """Advice Agent — triage a maintenance question: answer it, ask to disambiguate, or
+    hand off to troubleshooting if the user is actually facing the fault now."""
+    route: Literal["answer", "ask", "troubleshoot"] = Field(
+        description="answer = a general/preventive/how-to question -> give grounded guidance; "
+                    "ask = unclear whether they're FACING this on a machine now or asking generally "
+                    "-> ask one disambiguating question; "
+                    "troubleshoot = they've made clear they ARE facing this fault now and want it "
+                    "fixed -> hand off to diagnosis.")
+    topic: Optional[str] = Field(default=None, description="The maintenance topic/symptom in a few words (for retrieval, and carried to troubleshooting), e.g. 'bed heating up too rapidly'.")
+    question: Optional[str] = Field(default=None, description="When route=ask: the single disambiguating question, e.g. 'Are you seeing this on a machine right now (I can diagnose it), or asking for general guidance?'")
 
 
 class Intake(BaseModel):
