@@ -47,13 +47,14 @@ _REFERENTIAL_RE = re.compile(
     r"|(recent|last|latest|previous)\s+(one|incident|ticket))\b", re.I)
 
 
-# A reply that REFINES the browse list (a filter), vs a pivot to a different request.
-# "mine"/"under my name"/"closed"/"all" can appear mid-sentence ("what is under my
-# name") so they're a substring match; bare "open" is anchored so "open a new
-# incident" (a pivot) is NOT treated as the "open" filter.
+# A reply that REFINES the browse list, vs a pivot to a different request. The manage
+# picker is open-only (you act on open incidents), so the only real refinement is
+# "mine" — matched as a substring so natural phrasings work ("what is under my name",
+# "which are mine", "the ones I reported"). A bare "open" re-lists; it's anchored so
+# "open a new incident" (a pivot) is NOT treated as a filter.
 _REFINE_RE = re.compile(
-    r"\b(mine|my\s+(name|incidents?|tickets?|ones?)|under\s+my\s+name|assigned\s+to\s+me"
-    r"|reported\s+by\s+me|i\s+reported|closed|resolved|all|everything)\b", re.I)
+    r"\b(mine|my\s+(name|incidents?|tickets?|ones?)|under\s+my\s+name"
+    r"|assigned\s+to\s+me|reported\s+by\s+me|i\s+reported)\b", re.I)
 _OPEN_FILTER_RE = re.compile(r"^\s*(show |list |the )?open( ones| incidents)?\s*[.!]*\s*$", re.I)
 
 
@@ -119,22 +120,20 @@ def _format_incident_list(incidents: list, status: str, mine: bool) -> str:
     table = ("| " + " | ".join(headers) + " |\n"
              "| " + " | ".join("---" for _ in headers) + " |\n"
              + "\n".join(body))
-    tip = "Reply with an id (e.g. inc_22)" + ("." if mine else ", or say 'mine' / 'closed' to filter.")
-    return (f"Which incident would you like to act on? Here are the {status} "
+    tip = "Reply with an id (e.g. inc_22)" + ("." if mine else ", or say 'mine' to see only yours.")
+    return (f"Which incident would you like to act on? Here are the open "
             f"incidents{scope}:\n\n" + table + "\n\n" + tip)
 
 
 async def _browse_clarify(request_text: str, original_request: str, state: dict, versions: dict) -> dict:
-    """List incidents (open by default; 'mine' -> filtered to this operator; 'closed'/
-    'all' widen) and ask the user to pick one. Carries the ORIGINAL request so the
-    chosen id resumes with the right intent."""
-    mine = bool(re.search(r"\b(my|mine|i reported|assigned to me)\b", request_text, re.I))
-    if re.search(r"\b(closed|resolved)\b", request_text, re.I):
-        status = "closed"
-    elif re.search(r"\ball\b", request_text, re.I):
-        status = "all"
-    else:
-        status = "open"
+    """List incidents for the user to pick one to ACT ON, and carry the ORIGINAL request
+    so the chosen id resumes with the right intent. Always scoped to OPEN incidents:
+    every manage action (close/assign/update) applies to an open incident — you can't
+    act on a closed one — so "all"/"closed" don't widen here (closed-incident history is
+    a read/analytics question). `mine` filters to the current operator."""
+    mine = bool(re.search(r"\b(my|mine|i reported|reported by me|assigned to me|under my name)\b",
+                          request_text, re.I))
+    status = "open"
     employee_id = state.get("current_user_id") if mine else None
     incidents = await _call("list_incidents",
                             {"status": status, "employee_id": employee_id}, expect_list=True)
