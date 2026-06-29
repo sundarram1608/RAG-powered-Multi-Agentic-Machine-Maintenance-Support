@@ -21,6 +21,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # agents/ on path
 import clarify
+import history
 import mcp_client
 from llms import get_reasoner
 from schemas import Intake
@@ -55,7 +56,16 @@ async def intake_node(state: dict) -> dict:
     carried_machine = state.get("machine_id")
     carried_symptom = state.get("symptom")
 
-    human = f"User message: {user_input}"
+    # Give the LLM the context to interpret the reply: earlier turns + the exact
+    # question we just asked (so "Got it"/"ok"/"that one" are understood, not guessed).
+    context = history.format_recent((state.get("messages") or [])[:-1], max_exchanges=5)
+    prior_question = state.get("clarification_question")
+    human = ""
+    if context:
+        human += f"Earlier in this conversation:\n{context}\n\n"
+    if prior_question:
+        human += f'You just asked the user: "{prior_question}"\n\n'
+    human += f"User's latest message: {user_input}"
     if carried_machine or carried_symptom:
         human += (f"\n\nAlready gathered — machine_id: {carried_machine}, "
                   f"symptom: {carried_symptom}")
