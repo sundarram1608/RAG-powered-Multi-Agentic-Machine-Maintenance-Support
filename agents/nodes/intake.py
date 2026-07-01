@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # agents/ on path
 import clarify
 import history
 import mcp_client
+import streaming
 from llms import get_reasoner
 from schemas import Intake
 from prompts.intake import INTAKE_SYSTEM, INTAKE_SYSTEM_VERSION
@@ -31,6 +32,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 
 async def _get_machine(machine_id: str) -> dict:
+    streaming.emit_tool("get_machine", {"machine_id": machine_id})
     tools = await mcp_client.get_all_tools()
     tool = next(t for t in tools if t.name == "get_machine")
     return mcp_client.parse_tool_result(await tool.ainvoke({"machine_id": machine_id}))

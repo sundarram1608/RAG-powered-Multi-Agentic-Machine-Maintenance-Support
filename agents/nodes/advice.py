@@ -19,6 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # agents/ on path
 import history
 import mcp_client
+import streaming
 from llms import get_reasoner
 from schemas import AdvicePlan
 from prompts.advice import ADVICE_TRIAGE_SYSTEM, ADVICE_TRIAGE_VERSION
@@ -27,6 +28,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 
 async def _safety(query: str) -> list:
+    streaming.emit_tool("safety_retrieval", {"query": query})
     tools = await mcp_client.get_all_tools()
     tool = next(t for t in tools if t.name == "safety_retrieval")
     return mcp_client.parse_tool_result(await tool.ainvoke({"query": query, "k": 4}),

@@ -32,6 +32,7 @@ import clarify
 import config
 import history
 import mcp_client
+import streaming
 from llms import get_reasoner
 from schemas import ClarifyReply, ManagePlan, NoteReply, TechPick
 from prompts.clarify_interp import CLARIFY_INTERP_SYSTEM, NOTE_REPLY_SYSTEM, TECH_PICK_SYSTEM
@@ -86,6 +87,7 @@ async def _interpret_note(user_input: str) -> NoteReply:
 
 
 async def _call(name: str, args: dict, expect_list: bool = False):
+    streaming.emit_tool(name, args)
     tools = await mcp_client.get_all_tools()
     tool = next(t for t in tools if t.name == name)
     return mcp_client.parse_tool_result(await tool.ainvoke(args), expect_list=expect_list)

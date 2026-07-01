@@ -29,38 +29,29 @@ _BUTTONS = {
     "approve": [("✅ Approve", "approve"), ("✖ Reject", "reject")],
 }
 
-# graph node -> user-facing progress label (Phase 6b live streaming). Nodes without a
-# label (e.g. "__interrupt__") leave the status text unchanged.
-_NODE_LABELS = {
-    "input": "Checking your request…",
-    "supervisor": "Figuring out what you need…",
-    "intake": "Identifying the machine…",
-    "diagnosis": "Diagnosing the fault…",
-    "verifier": "Double-checking the diagnosis…",
-    "decider": "Preparing your options…",
-    "self_action": "Preparing your options…",
-    "technician_action": "Booking a technician…",
-    "analytics_generate": "Writing a query…",
-    "text_to_sql_reviewer": "Reviewing the query…",
-    "analytics_execute": "Fetching the data…",
-    "manage_resolve": "Looking up the incident…",
-    "manage_execute": "Applying the change…",
-    "output": "Writing the response…",
-}
-
-
 def _run_streamed(stream) -> dict:
-    """Drive a backend stream: update a live status per node, return the result event."""
+    """Drive a backend stream into a live activity log + a typing answer; return the
+    final result event. Event types: decision/tool/step (log lines), token (answer
+    tokens), result (the final answer/interrupt/error dict)."""
     result = None
-    with st.status("Working…", expanded=False) as status:
-        for ev in stream:
-            if ev.get("type") == "progress":
-                label = _NODE_LABELS.get(ev.get("node"))
-                if label:
-                    status.update(label=label)
-            elif ev.get("type") == "result":
-                result = ev
-        status.update(label="Done", state="complete")
+    steps = []          # activity-log lines (decisions + tool calls)
+    tokens = []         # streamed answer tokens
+    status = st.status("Working…", expanded=True)   # the live log (on top; collapses at end)
+    answer_box = st.empty()                          # the answer, BELOW the log (stays visible)
+    for ev in stream:
+        t = ev.get("type")
+        if t in ("decision", "tool", "step"):
+            line = ev.get("text", "")
+            if line:
+                steps.append(line)
+                status.update(label=line)               # spinner shows the latest step
+                status.markdown("\n".join(f"- {s}" for s in steps))
+        elif t == "token":
+            tokens.append(ev.get("text", ""))
+            answer_box.markdown("".join(tokens))         # answer types out live
+        elif t == "result":
+            result = ev
+    status.update(label="Done", state="complete", expanded=False)
     return result or {"kind": "error",
                       "content": "⚠️ Sorry — something went wrong. Please try again."}
 

@@ -22,6 +22,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # agents/ on path
 import config
 import mcp_client
+import streaming
 from llms import get_reasoner
 from schemas import SqlPlan
 from history import format_recent
@@ -71,6 +72,7 @@ def analytics_generate(state: dict) -> dict:
 async def analytics_execute(state: dict) -> dict:
     """Mechanical phase: run the approved SQL via run_readonly_query (no LLM)."""
     sql = state["sql_plan"]["sql"]
+    streaming.emit_tool("run_readonly_query", {})
     tools = await mcp_client.get_all_tools()
     run_tool = next(t for t in mcp_client.tools_for("analytics", tools)
                     if t.name == "run_readonly_query")

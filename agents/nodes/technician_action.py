@@ -25,9 +25,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # agents/ on path
 import mcp_client
+import streaming
 
 
 async def _call(name: str, args: dict):
+    streaming.emit_tool(name, args)
     tools = await mcp_client.get_all_tools()
     tool = next(t for t in tools if t.name == name)
     return mcp_client.parse_tool_result(await tool.ainvoke(args))

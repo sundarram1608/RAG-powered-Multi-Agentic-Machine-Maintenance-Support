@@ -50,15 +50,31 @@ app's lifetime; each UI call submits a coroutine to it and blocks for the result
 `app_graph` + its `MemorySaver` are module-level, so a paused turn survives Streamlit
 reruns and resumes correctly.
 
-## Live progress (6b)
-Turns are **streamed**: `api.stream_turn` / `stream_resume` run the graph with
-`astream(stream_mode="updates")` and yield `{"type":"progress","node":…}` per node, then
-a final `{"type":"result", …}` (the same answer/interrupt/error dict the non-streaming
-calls return). `backend.stream_*` bridges that async generator to the sync UI via a
-thread-safe queue. `app_utils._run_streamed` drives a collapsible `st.status` whose label
-updates per node (`_NODE_LABELS`, e.g. "Diagnosing the fault…"), then `_apply` handles the
-result exactly as before. Interrupts still pause (the stream ends at `__interrupt__`); the
-non-streaming `start_turn`/`resume_turn` remain for any non-UI caller.
+## Live progress (6b) — activity feed + streamed answer
+Turns are **streamed** as a live activity feed, not static labels. `api.stream_turn` /
+`stream_resume` run the graph with `astream(stream_mode=["updates","messages","custom"])`
+and translate the three modes into events:
+- **`decision`** (from `updates`) — a short line summarising each finished agent from its
+  output fields: "🧭 Routing → analytics", "🔬 Diagnosis → thermistor fault (confidence
+  medium)", "⚖️ Verifier → approved (4/5)". These `reason`/`evidence`/`verdict` fields are
+  the closest thing the (structured-output) agents have to a visible thought process.
+- **`tool`** (from `custom`) — each tool call a node makes, surfaced via
+  [`agents/streaming.py`](../agents/streaming.py) `emit_tool()`: "🔧 Searching the manual",
+  "🔧 Booking the technician · E13". (LangGraph's built-in streams can't see these — our
+  tools are called directly through the MCP client — so nodes emit them explicitly.)
+- **`token`** (from `messages`, Output node only) — the final answer **types out live**;
+  a trailing full-message repeat is de-duped in `api.py`.
+
+`backend.stream_*` bridges the async generator to the sync UI via a thread-safe queue.
+`app_utils._run_streamed` renders the decision/tool lines into a collapsible `st.status`
+log (auto-expanded while running, collapses to "Done") with the answer streaming just
+below it, then `_apply` handles the final result exactly as before. Interrupts still pause
+(the stream ends at `__interrupt__`); the non-streaming `start_turn`/`resume_turn` remain
+for any non-UI caller.
+
+> Note: the agents run on Groq Llama + Gemini via `with_structured_output`, which do **not**
+> emit chain-of-thought — so this is a faithful *activity* feed (decisions + tools + the
+> answer), not literal model "thinking" like Claude's extended-thinking view.
 
 ## Files
 | File | Purpose |

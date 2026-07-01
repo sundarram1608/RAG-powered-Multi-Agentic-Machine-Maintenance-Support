@@ -24,6 +24,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # agents/ on path
 import config
 import mcp_client
+import streaming
 from llms import get_reasoner
 from schemas import Diagnosis
 from prompts.diagnosis import DIAGNOSIS_SYSTEM, DIAGNOSIS_SYSTEM_VERSION
@@ -91,6 +92,7 @@ async def diagnosis_node(state: dict) -> dict:
     by_name = {t.name: t for t in tools}
 
     async def call(name, args, expect_list=False):
+        streaming.emit_tool(name, args)
         return mcp_client.parse_tool_result(
             await by_name[name].ainvoke(args), expect_list=expect_list)
 

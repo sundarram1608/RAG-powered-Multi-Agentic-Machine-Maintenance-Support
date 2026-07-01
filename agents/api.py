@@ -91,26 +91,77 @@ async def resume_turn(thread_id: str, value, turn_id: str = None, user_id: str =
     return _interpret(result, turn_id, run_id)
 
 
-# ── streaming variants (Phase 6b) — same contract, but yield per-node progress ──
-# Each yields {"type": "progress", "node": <name>} as the graph runs, then a final
-# {"type": "result", **<same dict as start_turn/resume_turn>}. The graph is streamed
-# with stream_mode="updates" (one {node: state-delta} chunk per node; an interrupt
-# arrives as a {"__interrupt__": (...)} chunk). Deltas are accumulated into `result`
-# so the existing _interpret handles answer-vs-interrupt unchanged.
+# ── streaming variants (Phase 6b) — a live activity feed, then the final result ──
+# Streamed with THREE modes at once (astream yields (mode, chunk) tuples):
+#   "updates"  -> one {node: state-delta} per finished node; we accumulate the delta
+#                 (so _interpret still works) and emit a "decision" line summarising it.
+#   "messages" -> LLM token chunks; we forward tokens from the OUTPUT node as "token"
+#                 events (the answer types out live) and ignore other nodes (JSON).
+#   "custom"   -> tool/sub-step events a node emitted via streaming.emit() -> "tool".
+# Event shapes yielded: {"type":"decision"|"tool"|"token"|"result", ...}.
+
+def _summarize(node: str, d: dict) -> str | None:
+    """A short, human 'decision' line for a finished node (None -> nothing to show)."""
+    if node == "supervisor" and d.get("intent"):
+        return f"🧭 Routing → {d['intent']}"
+    if node == "advice" and d.get("advice_route"):
+        return {"answer": "💡 Preparing advice", "ask": "❓ Checking: facing it now, or asking?",
+                "troubleshoot": "🔧 Handing off to troubleshooting"}.get(d["advice_route"])
+    if node == "intake":
+        if d.get("needs_clarification"):
+            return "🛠 Intake → need a bit more info"
+        if d.get("machine_id"):
+            return f"🛠 Intake → machine {d['machine_id']}, symptom captured"
+    if node == "diagnosis" and d.get("diagnosis"):
+        dx = d["diagnosis"]
+        return f"🔬 Diagnosis → {str(dx.get('root_cause'))[:60]} (confidence {dx.get('retrieval_confidence')})"
+    if node == "verifier" and d.get("verdict"):
+        v = d["verdict"]
+        return f"⚖️ Verifier → {'approved' if v.get('approved') else 'needs rework'} ({v.get('score')}/5)"
+    if node == "analytics_generate" and d.get("sql_plan"):
+        return "🧮 Wrote a SQL query"
+    if node == "text_to_sql_reviewer" and d.get("sql_review") is not None:
+        return f"🔎 SQL review → {'approved' if d['sql_review'].get('approved') else 'rejected, retrying'}"
+    if node == "decider" and d.get("decision_path"):
+        return f"🧑‍🔧 Chosen path → {d['decision_path']}"
+    if node == "manage_resolve":
+        mp = d.get("manage_plan") or {}
+        if d.get("needs_clarification"):
+            return "📇 Looking up the incident…"
+        if mp.get("plan_summary"):
+            return f"📝 {mp['plan_summary'][:70]}"
+    return None
+
 
 async def _astream(graph_input, thread_id, user_id, meta_value, run_name, turn_id):
     turn_id = turn_id or obs.new_turn_id()
     cfg, run_id, meta = obs.make_config(
         thread_id, user_id, meta_value, turn_id=turn_id, run_name=run_name)
     result = {}
+    answer_acc = ""      # accumulated answer tokens (to drop a redundant final full-message emit)
     try:
-        async for chunk in app_graph.astream(graph_input, cfg, stream_mode="updates"):
-            for node, delta in chunk.items():
-                if node == "__interrupt__":
-                    result["__interrupt__"] = delta
-                elif isinstance(delta, dict):
-                    result.update(delta)
-                yield {"type": "progress", "node": node}
+        async for mode, chunk in app_graph.astream(
+                graph_input, cfg, stream_mode=["updates", "messages", "custom"]):
+            if mode == "custom":                                   # node-emitted tool/step line
+                if isinstance(chunk, dict) and chunk.get("text"):
+                    yield {"type": chunk.get("type", "tool"), "text": chunk["text"]}
+            elif mode == "messages":                               # LLM tokens (answer only)
+                msg, md = chunk
+                if (md or {}).get("langgraph_node") == "output":
+                    text = getattr(msg, "content", "") or ""
+                    # forward streaming deltas; skip a trailing full-message repeat (== acc)
+                    if text and text != answer_acc:
+                        yield {"type": "token", "text": text}
+                        answer_acc += text
+            elif mode == "updates":                                # a node finished
+                for node, delta in chunk.items():
+                    if node == "__interrupt__":
+                        result["__interrupt__"] = delta
+                    elif isinstance(delta, dict):
+                        result.update(delta)
+                        line = _summarize(node, delta)
+                        if line:
+                            yield {"type": "decision", "text": line}
     except Exception as e:
         yield {"type": "result", **_error_result(e, turn_id, run_id)}
         return

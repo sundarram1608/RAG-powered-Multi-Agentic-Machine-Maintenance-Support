@@ -75,9 +75,11 @@ start_turn(thread_id, user_id, message) -> Result   # Result carries kind/conten
 resume_turn(thread_id, value)           -> Result   # answer a clarification / approve an action
 stream_turn(...) / stream_resume(...)   -> async-gen of {type:"progress",node} … {type:"result",**Result}
 ```
-The `stream_*` variants (Phase 6b) run `astream(stream_mode="updates")` and emit a
-per-node progress event then the same final `Result` — used by the app for a live
-status; `start_turn`/`resume_turn` (one-shot `ainvoke`) remain for non-streaming callers.
+The `stream_*` variants (Phase 6b) run `astream(stream_mode=["updates","messages","custom"])`
+and emit a live activity feed — `decision` lines (per-agent summaries from `updates`),
+`tool` lines (nodes' MCP calls via `streaming.emit_tool`, on the `custom` stream), and
+`token` events (the Output node's answer, streamed) — then the same final `Result`.
+`start_turn`/`resume_turn` (one-shot `ainvoke`) remain for non-streaming callers.
 - `thread_id` = one chat (memory + pause/resume via the checkpointer).
 - `user_id` = the logged-in operator's `employee_id` (drives `create_incident(reported_by=…)` and notifications — set from login, never asked in chat).
 - `interrupt()` points (Intake clarify, Decider choice, Technician-Action approval) surface as `needs_input`/`needs_approval`; the app renders a prompt / Approve-Reject and calls `resume_turn`.
@@ -192,6 +194,7 @@ The plumbing every node stands on (no nodes yet):
 | [`mcp_client.py`](mcp_client.py) | connect to both MCP servers; `get_all_tools()` + `tools_for(agent)` |
 | [`history.py`](history.py) | `format_recent(messages, n)` — recent-exchanges window for follow-up context |
 | [`clarify.py`](clarify.py) | clarify-interrupt UX helpers: `guide()`/`give_up()` (how-to-find-it text when a user is stuck) + `is_bail()`/`bailed()` (cheap fast-path to stop on obvious "ok"/"cancel"). Intent itself (stuck / which-incident / which-tech / note) is LLM-judged at the agents. |
+| [`streaming.py`](streaming.py) | `emit()`/`emit_tool()` — nodes surface tool calls / sub-steps onto the `astream(stream_mode="custom")` feed (no-op outside a streamed run) for the app's 6b live activity log |
 
 **Milestone test** (`python agents/mcp_client.py`, under a clearly-marked
 `MILESTONE TEST` header):
