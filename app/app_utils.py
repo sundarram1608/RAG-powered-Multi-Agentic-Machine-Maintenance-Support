@@ -52,8 +52,10 @@ def _run_streamed(stream) -> dict:
         elif t == "result":
             result = ev
     status.update(label="Done", state="complete", expanded=False)
-    return result or {"kind": "error",
-                      "content": "⚠️ Sorry — something went wrong. Please try again."}
+    result = result or {"kind": "error",
+                        "content": "⚠️ Sorry — something went wrong. Please try again."}
+    result["steps"] = steps          # persist the activity feed with the message
+    return result
 
 
 def init_session_state() -> None:
@@ -84,11 +86,18 @@ def set_operator(user_id) -> None:
 def render_chat_history() -> None:
     for m in st.session_state.messages:
         with st.chat_message(m["role"]):
+            steps = m.get("steps")
+            if steps:   # the live activity feed, persisted as a collapsed expander above the reply
+                with st.expander(f"🔎 Activity · {len(steps)} steps", expanded=False):
+                    st.markdown("\n".join(f"- {s}" for s in steps))
             st.markdown(m["content"])
 
 
-def _append(role, content) -> None:
-    st.session_state.messages.append({"role": role, "content": content})
+def _append(role, content, steps=None) -> None:
+    msg = {"role": role, "content": content}
+    if steps:
+        msg["steps"] = steps
+    st.session_state.messages.append(msg)
 
 
 def _prompt_text(kind, payload) -> str:
@@ -102,19 +111,22 @@ def _prompt_text(kind, payload) -> str:
 
 
 def _apply(res) -> None:
-    """Update state from a backend result: final answer, a new interrupt, or an error."""
+    """Update state from a backend result: final answer, a new interrupt, or an error.
+    `res["steps"]` (the streamed activity feed) is persisted with the message so it stays
+    visible as an expander in the history."""
+    steps = res.get("steps")
     if res["kind"] == "error":
         # provider/other failure (e.g. rate limit) — show the friendly message and
         # leave `pending` unchanged so the user can retry the same step.
-        _append(ROLE_ASSISTANT, res.get("content") or "⚠️ Something went wrong. Please try again.")
+        _append(ROLE_ASSISTANT, res.get("content") or "⚠️ Something went wrong. Please try again.", steps)
         return
     if res["kind"] == "answer":
-        _append(ROLE_ASSISTANT, res.get("content") or "_(no response)_")
+        _append(ROLE_ASSISTANT, res.get("content") or "_(no response)_", steps)
         st.session_state.pending = None
     else:
         st.session_state.pending = {"kind": res["kind"], "payload": res.get("payload", {}),
                                     "turn_id": res.get("turn_id"), "run_id": res.get("run_id")}
-        _append(ROLE_ASSISTANT, _prompt_text(res["kind"], res.get("payload", {})))
+        _append(ROLE_ASSISTANT, _prompt_text(res["kind"], res.get("payload", {})), steps)
 
 
 def handle_user_message(text) -> None:

@@ -68,9 +68,11 @@ and translate the three modes into events:
 `backend.stream_*` bridges the async generator to the sync UI via a thread-safe queue.
 `app_utils._run_streamed` renders the decision/tool lines into a collapsible `st.status`
 log (auto-expanded while running, collapses to "Done") with the answer streaming just
-below it, then `_apply` handles the final result exactly as before. Interrupts still pause
-(the stream ends at `__interrupt__`); the non-streaming `start_turn`/`resume_turn` remain
-for any non-UI caller.
+below it. The collected step lines are then **persisted with the message** (`steps` on the
+history entry) and re-rendered as a collapsed **"🔎 Activity" expander above the reply**, so
+the feed doesn't vanish after the turn — `render_chat_history` shows it for any past turn.
+Interrupts still pause (the stream ends at `__interrupt__`); the non-streaming
+`start_turn`/`resume_turn` remain for any non-UI caller.
 
 > Note: the agents run on Groq Llama + Gemini via `with_structured_output`, which do **not**
 > emit chain-of-thought — so this is a faithful *activity* feed (decisions + tools + the
