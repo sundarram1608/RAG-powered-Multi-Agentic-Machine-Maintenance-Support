@@ -175,10 +175,11 @@ Phase 5f's free governance hooks (all no-ops unless `LANGSMITH_TRACING=true`). *
 masking** is the third 5f governance control but lives in `tracing.py` (see §5); the
 two hooks in **`governance.py`** are:
 
-1. **Feedback capture** — `log_feedback(run_id, score, comment)` records a human
-   thumbs-up/down on a turn's trace (`score`: `1`=👍, `0`=👎).
+1. **Feedback capture** — `log_feedback(run_id, score, comment=None, key="user_feedback")`
+   records a human thumbs-up/down on a turn's trace (`score`: `1`=👍, `0`=👎); the
+   feedback is stored under `key` (default `user_feedback`).
 2. **Review queue** — `flag_for_review(run_id, reason)` adds a run to a LangSmith
-   **annotation queue** (`fdm-review`, auto-created) for human review.
+   **annotation queue** (`fdm-review`, created-or-reused) for human review.
 
 ### How they're used in real time
 
@@ -191,7 +192,10 @@ if st.button("👍"): observability.log_feedback(res["run_id"], 1)
 if st.button("👎"): observability.log_feedback(res["run_id"], 0, comment=note)
 ```
 The feedback lands on that exact trace in LangSmith — so you can later filter "all 👎
-turns" and turn them into new eval cases.
+turns" and turn them into new eval cases. The app-layer wrapper in
+`app/backend.py` additionally calls `flag_for_review(run_id, "user thumbs-down")`
+on a 👎, so downvoted turns also land in `fdm-review` (see below) — not just the
+automatically-flagged ones.
 
 **Review queue (automatic).** Every turn, `enrich_run` calls `review_reason(state)`;
 qualifying runs are auto-routed to the `fdm-review` queue. Current criteria:

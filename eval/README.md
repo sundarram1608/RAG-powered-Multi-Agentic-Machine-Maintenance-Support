@@ -4,15 +4,17 @@ This folder holds the **offline evaluation** of the agent workflow: curated gold
 (Phase 5c–5e). It is **backstage** — it never changes runtime behaviour. It reads the knowledge base **read-only** to derive ground truth, and produces measurable scores you can open and compare in LangSmith.
 
 > Status: **5b datasets ✅ · 5c evaluators+Excel ✅ · 5d tuning ✅ · 5e versioning+CI ✅.**
-> 6 datasets (100 examples) validated; runner produces a LangSmith Experiment + Excel
+> 6 datasets (109 examples) validated; runner produces a LangSmith Experiment + Excel
 > per dataset; tuning sweeps in `tuning/`; version-stamping + regression gate in
 > `versioning_and_ci/` (4 valid baselines blessed; safety/manage deferred until a
 > clean re-run).
 
 ### Eval judge note (free-tier reality)
 
-The judge is decoupled on **OpenRouter** (`EVAL_JUDGE_MODEL`). We picked an independent
-family (distinct from the Llama diagnoser + Gemini verifier). The intended
+The judge is decoupled on **OpenRouter** (`EVAL_JUDGE_MODEL`). We picked a family
+distinct from the app's *primary* models — the Llama diagnoser + Gemini verifier —
+and run it on a **separate provider/quota** from the live agent (the app's *fallback*
+judge is Qwen-on-Groq, the same family, but a different provider). The intended
 `deepseek-*:free` was retired to paid, so the default is `**qwen/qwen3-next-80b-a3b-instruct:free`**
 (Qwen — still independent). **Free OpenRouter models are heavily rate-limited upstream**
 (`429`), so LLM-judge scores (faithfulness, answer relevance) may come back as
@@ -289,7 +291,8 @@ Step 3 needs `LANGSMITH_API_KEY` in `.env`. Steps 1–2 are also the right pre-c
 check after editing any dataset. The **evaluators (5c)** are a *separate* later step
 that consumes the uploaded datasets — you do **not** need them to run 1–3.
 
-Current status: `validate_datasets.py` → **ALL VALID (100)**;
+Current status: `validate_datasets.py` → **ALL VALID (109)**
+(troubleshoot 15 · retrieval 10 · sql 15 · routing 31 · safety 25 · manage 13);
 `derive_sql_expectations.py` → **ALL GOLD ANSWERS VERIFIED**.
 
 ### 7.2 How to run the evaluation (5c)
@@ -319,7 +322,10 @@ Each dataset → a **LangSmith Experiment** (URL printed) + a row block in
 
 
 Verified: `--dataset routing` → Experiment created, **25/25 PASS** (intent accuracy),
-Excel written.
+Excel written. *(That blessed run predates the `advice` route: `routing_cases` has
+since grown 25 → 31 — the 4 `advice` rows + 2 boundary cases — and `manage_cases`
+10 → 13. Re-run `run_eval.py --dataset routing` and `ci_gate.py --bless` to refresh
+the baseline for the enlarged sets.)*
 
 ---
 
@@ -419,6 +425,10 @@ scores**. Valid numbers below; invalidated ones flagged.
 | `retrieval_labels` | 2/10 (20%) | ✅ valid + **real finding** — recall ceiling: the right page often isn't in the candidate set at all (chunking/`k`/embeddings gap; see TUNING_LOG) |
 | `safety_redteam` | 2/25 (8%) | ⚠️ **invalid** — 22/25 are `got None` (Groq daily-cap call failures), not guard errors |
 | `manage_cases` | 0/10 (0%) | ⚠️ **invalid** — 9/10 are `got None` (Groq daily-cap), not manage errors |
+
+> Denominators are the dataset sizes **as of 2026-06-24**. `routing_cases` has since
+> grown 25 → 31 (the `advice` route) and `manage_cases` 10 → 13; re-run those two to
+> refresh the numbers above and re-bless the baseline.
 
 Tuning: `reranker_sweep` ✅ ran (rerank ON lifts MRR 0.48→0.55 / nDCG 0.80→0.88, `RERANK_CANDIDATES=8` optimal — kept). `verifier_calibration` + `diagnosis_sweep` ❌ **did not run** — crashed on the Groq daily token limit.
 

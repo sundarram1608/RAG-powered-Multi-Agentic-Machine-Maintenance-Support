@@ -4,8 +4,9 @@ embedding_model_loader.py
 Step 3 of the RAG ingestion pipeline: load the embedding model ONCE and share it.
 
 Loads BAAI/bge-m3 through a LangChain HuggingFaceEmbeddings wrapper, on the best
-available device (CUDA > MPS > CPU), with normalized embeddings (so cosine is the
-natural similarity). The model is cached (lru_cache) so the ~2.2 GB weights load
+available device (CUDA > CPU; MPS deliberately skipped — see `_select_device`),
+with normalized embeddings (so cosine is the natural similarity). The model is
+cached (lru_cache) so the ~2.2 GB weights load
 only once per process, then are reused by:
   - Step 4 (semantic chunking — sentence-similarity breakpoints)
   - Step 5 (embedding the final chunks)
@@ -13,8 +14,10 @@ only once per process, then are reused by:
 
 Using the SAME model everywhere => one shared vector space (required for retrieval).
 
-Device note: CUDA covers cloud GPUs (e.g. AWS g5), MPS covers Apple Silicon, CPU
-is the universal fallback — so this runs unchanged across machines.
+Device note: CUDA covers cloud GPUs (e.g. AWS g5) and CPU is the universal
+fallback, so this runs unchanged across machines. MPS (Apple Silicon) is skipped
+in auto-selection because it measured ~4x slower than CPU for bge-m3 here; set
+EMBEDDING_DEVICE to force a device (e.g. "mps"/"cpu"/"cuda").
 """
 
 import sys

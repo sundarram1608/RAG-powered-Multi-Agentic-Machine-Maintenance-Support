@@ -1,13 +1,17 @@
 """
-graph.py — Phase 4c: assemble the 12 agents (14 nodes) into one LangGraph workflow.
+graph.py — Phase 4c: assemble the 13 agents (15 nodes) into one LangGraph workflow.
 
 Topology (see agents/README.md → Graph assembly):
   START -> input -(safe)-> supervisor -(intent)->
      general          -> output
+     advice           -> advice [interrupt] -> answer -> output
+                         (unclear "facing it now?" -> interrupt to ask;
+                          user is facing it -> hand off to intake -> troubleshoot)
      analytics        -> analytics_generate -> text_to_sql_reviewer -> analytics_execute
                          (reviewer-reject / db-error loop back to analytics_generate, cap 3)
      manage_incident  -> manage_resolve [interrupts] -> manage_execute -> output
      troubleshoot     -> intake [interrupt] -> diagnosis -> verifier
+                         intake: general_question -> advice ; clarify_abandoned -> output
                          verifier: approved+needs_technician -> technician_action
                                    approved+!needs_technician -> decider [interrupt]
                                    reject(<3) -> diagnosis ; reject(exhausted) -> technician_action

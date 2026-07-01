@@ -1,9 +1,10 @@
 """
-Streamlit entrypoint for the Agentic FDM Maintenance assistant (Phase 6a).
+Streamlit entrypoint for the Agentic FDM Maintenance assistant (Phase 6).
 
 Text-only chat over the LangGraph workflow (agents/api.py via app/backend.py), with a
 sidebar operator login and human-in-the-loop interrupts (clarify / decision / choice /
-approve). Streaming progress (6b) and feedback buttons (6c) come next.
+approve). Ships 6a (chat + interrupts), 6b (live streamed activity feed + answer), and
+6c (👍/👎 feedback → LangSmith).
 
 Run (HTTP MCP server must be up):
     python mcp_server/server.py http        # separate terminal

@@ -82,7 +82,7 @@ and emit a live activity feed — `decision` lines (per-agent summaries from `up
 `start_turn`/`resume_turn` (one-shot `ainvoke`) remain for non-streaming callers.
 - `thread_id` = one chat (memory + pause/resume via the checkpointer).
 - `user_id` = the logged-in operator's `employee_id` (drives `create_incident(reported_by=…)` and notifications — set from login, never asked in chat).
-- `interrupt()` points (Intake clarify, Decider choice, Technician-Action approval) surface as `needs_input`/`needs_approval`; the app renders a prompt / Approve-Reject and calls `resume_turn`.
+- `interrupt()` points (Intake clarify, Advice "facing it now?" disambiguation, Decider choice, Self-Action 2-button choice, Manage-Incident clarify / choose-technician / approve) surface as `needs_input`/`needs_approval`; the app renders a prompt / buttons / Approve-Reject and calls `resume_turn`. (Technician-Action is mechanical — no LLM, no approval interrupt.)
 - **Now:** a CLI driver ([`run.py`](run.py)) calls these. **Phase 6:** Streamlit wraps the *same* functions — no graph changes. The returned `run_id` lets the UI attach feedback (`observability.log_feedback`).
 
 ## Memory & threads
@@ -255,7 +255,7 @@ The plumbing every node stands on (no nodes yet):
 - **Input format** (state read): `user_input`, `current_user_id` (for "my/mine"), the recent `messages` window (for follow-ups); on retry also `sql_plan` + `sql_review`/`sql_result` (the critique/DB-error to fix).
 - **Output format** (Pydantic `SqlPlan` via `with_structured_output`) → state `sql_plan`, `analytics_attempts`; execute → `sql_result`; tags `prompt_versions["analytics"]`.
 - **Schema grounding:** the prompt is filled with `get_schema_context()` (from `schema_metadata.json`) + `REFERENCE_TODAY` (`2026-06-16`) so date logic matches the dataset.
-- **Edge cases:** reviewer-reject or DB-error → regenerate with the critique (capped at `ANALYTICS_MAX_ATTEMPTS = 3`); never selects `phone`; empty result → handled by Output ("no matching records"); results auto-capped at 200 rows.
+- **Edge cases:** reviewer-reject or DB-error → regenerate with the critique (capped at `ANALYTICS_MAX_ATTEMPTS = 3`); never selects `phone`; empty result → handled by Output ("no matching records"); results auto-capped at 200 rows (enforced by the `run_readonly_query` tool, `mcp_server/safety.py` `DEFAULT_MAX_ROWS`).
 - **Prompt:** `prompts/analytics.py` (`ANALYTICS_CODER_SYSTEM`) · v1.3.0 (operator-aware "my/mine"; follow-ups; incident lists include complaint + reported_by/technician_id by default).
 
 ### 4. Text-to-SQL Reviewer — `nodes/text_to_sql_reviewer.py`  ✅
@@ -279,7 +279,7 @@ The plumbing every node stands on (no nodes yet):
 - **Browse to pick (v1.3.0):** if no incident id is given, the node calls `list_incidents` and shows the **open incidents to choose from** (reply with an id); the user can say "mine" → filtered to the operator (`current_user_id`, reported-by **or** assigned), or "closed"/"all" to widen (closed rows also show the agent's root-cause/suggestion + what the technician did). The original intent ("update") is carried so the chosen id resumes correctly. Opening a *new* incident → redirected to troubleshoot.
 - **Reply understanding (hybrid, not regex-enumerated):** when there's no clear id, `_interpret_reply` resolves what the user means — cheap regex first (explicit `inc_NN`, obvious `is_bail`), then an **LLM** (`ClarifyReply`, in conversation context) for everything else. It generalizes to phrasings regex can't: a **referential mention** ("the booked incident", "wrap up that ticket from earlier", "close it") → resolves the id from history; a **described row** ("the cooling-fan one", "the MINTEMP one on M13") → maps to that incident; a **browse** request ("show me", "which are mine") → re-list (`mine` filter); a **bail/pivot** ("ok", "actually how many machines are overdue") → stop. Open a NEW incident → redirect to troubleshoot.
 - **Other edge cases:** unknown id → clarify; **close requires a comment** → ask if missing (never invented); close an already-closed / assign to a closed incident → `unsupported`; reject at approval → no writes. **The browse picker** is a Markdown table incl. **Reported by / Assigned to** employee ids and is **scoped to OPEN incidents** (every manage action applies to an open incident; closed-incident history is a read/analytics question).
-- **Prompts:** `prompts/manage_incident.py` — `MANAGE_RESOLVE` v1.3.0 (plan the action) + `CLARIFY_INTERP` v1.0.0 (interpret an ambiguous reply → `ClarifyReply`).
+- **Prompts:** `prompts/manage_incident.py` — `MANAGE_RESOLVE` v1.3.0 (plan the action); `prompts/clarify_interp.py` v1.1.0 holds the **three** reply interpreters this node uses as separate LLM calls — `CLARIFY_INTERP_SYSTEM` (ambiguous id/browse/bail → `ClarifyReply`), `TECH_PICK_SYSTEM` (which technician → `TechPick`), and `NOTE_REPLY_SYSTEM` (work note on close/update → `NoteReply`).
 
 ### 7. Intake Agent — `nodes/intake.py`  ✅
 - **Purpose:** the troubleshoot entry point — ensure a **valid machine** + a **symptom** before diagnosis; hand `mvc_code` + `symptom` to Diagnosis.
@@ -367,7 +367,7 @@ The plumbing every node stands on (no nodes yet):
   | manage_incident | template | `output_node._manage()` |
 
   > Note: `OUTPUT_SYSTEM` (`prompts/output.py`) deliberately covers **only** the two LLM modes (general + analytics) — under Option A the templated paths above are produced in code, not by the prompt.
-- **Input format** (state read): `intent`, `input_safe`, `guard_reason`, `user_input`, `diagnosis`, `action_result`, `manage_plan`, `sql_result`, `verifier_exhausted`, and (advice mode) `advice_topic` + `retrieved_context`. **Output format:** `final_response` (str, PII-scrubbed); tags `prompt_versions["output"]`.
+- **Input format** (state read): `intent`, `input_safe`, `guard_reason`, `user_input`, `diagnosis`, `action_result`, `manage_plan`, `sql_result`, `verifier_exhausted`, `clarify_abandoned` (+ its pre-composed `final_response`, passed straight through when a clarify loop bailed/gave up), and (advice mode) `advice_topic` + `retrieved_context`. **Output format:** `final_response` (str, PII-scrubbed); tags `prompt_versions["output"]`.
 - **PII scrub:** regex strips any email / 7+-digit phone from the final text (belt-and-suspenders; tools already keep PII out of state).
 - **Verifier exhaustion:** routed to Technician Action (auto-dispatch); Output states a technician will assess it (no apologetic caveat).
 - **Edge cases:** empty analytics result → "no matching records"; `error` action → generic apology. Systematic faithfulness eval deferred to Phase 5.
@@ -397,9 +397,10 @@ A few agents are multi-step, so the graph has slightly more nodes than agents:
 | `technician_action` | Technician Action |
 | `output` | Output |
 
-The 4 interrupting agents (`intake`, `decider`, `self_action`, `manage_resolve`)
-are registered as thin **interrupt wrappers** around the plain, standalone-tested
-node functions — the wrappers add `interrupt()`; the agents' logic is unchanged.
+The 5 interrupting agents (`intake`, `advice`, `decider`, `self_action`,
+`manage_resolve`) are registered as thin **interrupt wrappers** around the plain,
+standalone-tested node functions — the wrappers add `interrupt()`; the agents'
+logic is unchanged.
 
 ### 2. Topology
 Compiled graph — **17 nodes** (15 agent-nodes — 13 agents, with Analytics and Manage each spanning 2 nodes — + start/end), **32 edges**. Conditional
@@ -480,23 +481,26 @@ Each is a pure `state → next_node_name`:
 
 **Loops & caps:** analytics coder↔reviewer↔execute (`ANALYTICS_MAX_ATTEMPTS=3`),
 diagnosis↔verifier (`VERIFY_MAX_ATTEMPTS=3`), diagnosis-internal corrective-RAG
-(`MAX_DIAGNOSIS_REQUERIES=3`). `recursion_limit=50` sits well above the worst path.
+(`MAX_DIAGNOSIS_REQUERIES=3`). The app relies on LangGraph's default
+`recursion_limit` (25), well above the worst path; the e2e harness
+([`test_e2e.py`](test_e2e.py)) raises it to 50 for its long scripted runs.
 On verify exhaustion the verifier sets `verifier_exhausted=True` and routing
 auto-dispatches a technician (Output says a technician will assess it — no caveat).
 
 ### 4. Interrupts (human-in-the-loop) — LangGraph `interrupt()`
-The 4 interrupting nodes call `interrupt(payload)` **inside** the node: it pauses
+The 5 interrupting nodes call `interrupt(payload)` **inside** the node: it pauses
 the graph mid-node and surfaces `payload`; the caller resumes with
 `Command(resume=value)`, and `interrupt()` returns that value — **without re-running
 any upstream node** (unlike an end-and-restart, which would re-run the supervisor on
-every clarification and risk re-routing). The other 8 nodes never pause.
+every clarification and risk re-routing). The other 10 nodes never pause.
 
 | Node | Interrupt payload (`type`) | Resume value |
 |---|---|---|
 | `intake` | `clarify` — which machine / what symptom | the user's reply (loops until resolved, cap 4) |
+| `advice` | `clarify` — "facing it now, or just asking?" | the reply, re-triaged (answer / hand off to troubleshoot); after cap 4 it just answers generally |
 | `decider` | `decision` — fix it yourself or book a technician? | free text → interpreted to `self` / `technician` |
 | `self_action` | `choice` — guidance + 2 buttons | `"complete"` (log self-resolved) / `"technician"` (escalate) |
-| `manage_resolve` | `clarify` / `approve` | the reply, or `"approve"`/`"reject"` (reject → cancelled → output) |
+| `manage_resolve` | `clarify` / `approve` | the reply, or `"approve"`/`"reject"` (reject → cancelled → output); cap 6 (`MAX_CLARIFY + 2`, for its clarify→choose-tech→approve sub-steps) |
 
 ### 5. Turn & memory model
 - **`thread_id` = one conversation.** `MemorySaver` isolates state per thread (dev; swap to `SqliteSaver` for persistence in Phase 6).

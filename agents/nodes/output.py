@@ -6,10 +6,12 @@ state) so ids/names/dates/counts can't be hallucinated; the LLM is used ONLY for
 `general` (capability/greeting) and `analytics` (summarize rows, exact quoting).
 A regex PII scrub runs on the final text (belt-and-suspenders).
 
-LLM: Groq Llama 3.3 70B (general + analytics only). No tools.
+LLM: Groq Llama 3.3 70B (general + analytics + advice modes). No tools.
 Prompt: prompts/output.py (OUTPUT_SYSTEM, versioned).
 Input  (reads state): intent, input_safe, guard_reason, user_input, diagnosis,
-       action_result, manage_plan, sql_result, verifier_exhausted.
+       action_result, manage_plan, sql_result, verifier_exhausted,
+       clarify_abandoned (+ its pre-composed final_response), and (advice mode)
+       advice_topic + retrieved_context.
 Output (writes state): final_response, prompt_versions["output"].
 """
 

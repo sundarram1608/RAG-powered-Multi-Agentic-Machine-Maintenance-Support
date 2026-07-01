@@ -1,7 +1,9 @@
 # App layer — Streamlit UI (Phase 6)
 
 The operator-facing chat for the FDM maintenance assistant. It talks **only** to the
-agent boundary (`agents/api.py`) — it never touches the graph, tools, or DB directly.
+agent boundary (`agents/api.py`) — it never touches the graph or tools directly (the
+one exception is `backend.list_operators()`, a read-only `SELECT` on employees to
+populate the login dropdown; the agent path itself is untouched).
 
 > Status: **6a ✅** text chat + login + interrupts · **6b ✅** live activity feed + streamed
 > answer · **6c ✅** 👍/👎 feedback → LangSmith. (Image/vision input removed.)
@@ -50,6 +52,13 @@ app's lifetime; each UI call submits a coroutine to it and blocks for the result
 `app_graph` + its `MemorySaver` are module-level, so a paused turn survives Streamlit
 reruns and resumes correctly.
 
+> **Editing the backend?** Because the asyncio loop, `app_graph` and `MemorySaver`
+> are created **once at import**, Streamlit's file-watcher hot-reload (which re-runs
+> the *script* but keeps already-imported modules cached) does **not** pick up edits
+> to `backend.py`, `agents/`, or the prompts. Stop the process (`Ctrl+C`) and
+> **fully restart** `streamlit run app/main.py` — a browser refresh or auto-rerun is
+> not enough.
+
 ## Live progress (6b) — activity feed + streamed answer
 Turns are **streamed** as a live activity feed, not static labels. `api.stream_turn` /
 `stream_resume` run the graph with `astream(stream_mode=["updates","messages","custom"])`
@@ -62,6 +71,8 @@ and translate the three modes into events:
   [`agents/utils/streaming.py`](../agents/utils/streaming.py) `emit_tool()`: "🔧 Searching the manual",
   "🔧 Booking the technician · E13". (LangGraph's built-in streams can't see these — our
   tools are called directly through the MCP client — so nodes emit them explicitly.)
+  Nodes can also emit a generic **`step`** line (via `streaming.emit`) for a non-tool
+  progress note; the UI renders `decision` / `tool` / `step` identically as log lines.
 - **`token`** (from `messages`, Output node only) — the final answer **types out live**;
   a trailing full-message repeat is de-duped in `api.py`.
 

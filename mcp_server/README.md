@@ -59,7 +59,7 @@ the model, not just for humans.
 
 A single FastMCP instance serves one transport, so these are two server
 instances (built from the same file). The agent layer aggregates both with
-`langchain-mcp-adapters`' `MultiServerMCPClient`, presenting the union of all 15
+`langchain-mcp-adapters`' `MultiServerMCPClient`, presenting the union of all 16
 tools to the LLM. Switching the HTTP group to a remote host later is a one-line
 change (`host`/`port`), with auth/TLS added only if exposed beyond localhost.
 
@@ -171,7 +171,10 @@ python mcp_server/server.py --selftest   # expect 14 stdio + 2 http tools
 Thin MCP adapters over `rag/retriever.py` so retrieval is exposed alongside the DB
 tools (one uniform tool interface for the agent). Each flattens the retriever's
 nested citation fields (`source_file`, `page_start`, `page_end`) to the top level
-and drops internal metadata (`mvc_code`, `doc_type`) the LLM doesn't need.
+and drops internal metadata (`mvc_code`, `doc_type`) the LLM doesn't need. Chunk
+text is normalized through `_common.clean_chunk_text` (drops replacement /
+private-use / control glyphs left by PDF extraction and collapses repeated
+spaces) so citations and answers read cleanly.
 
 ### `user_manual_retrieval(query, mvc_code, k=5)`
 

@@ -258,13 +258,17 @@ and rebuilds the index from scratch.
 5. **Expected output**
    ```
    Loading embedding model…
-   Ingesting 5 documents…
-     [1/5] lulzbot_mini_user_manual.pdf: 83 pages -> 66 chunks stored   (counts illustrative)
-     [2/5] lulzbot_taz6_user_manual.pdf: ... chunks stored
-     ...
-     ✓ chunking details: wrote N rows to .../chunking_details.csv
-   ✅ Ingestion complete: <N> chunks in 'maintenance_manuals' (persisted to rag/chroma_store/)
+   Ingesting 5 documents…   (order = machine_versions sorted by mvc_code, then the safety guide)
+     [1/5] lulzbot_mini_user_manual.pdf:          66 chunks stored
+     [2/5] lulzbot_taz6_user_manual.pdf:          80 chunks stored
+     [3/5] lulzbot_taz_workhorse_user_manual.pdf: 105 chunks stored
+     [4/5] lulzbot_taz_pro_user_manual.pdf:       105 chunks stored
+     [5/5] niosh_safe_3d_printing_2024-103.pdf:   235 chunks stored
+     ✓ chunking details: wrote 591 rows to .../chunking_details.csv
+   ✅ Ingestion complete: 591 chunks in 'maintenance_manuals' (persisted to rag/chroma_store/)
    ```
+   (356 user-manual + 235 safety = 591 chunks; exact counts can shift slightly with
+   chunker/model versions. See `rag/chunking_details.csv` for the committed breakdown.)
    Takes ~30–45 min on CPU (one-time).
 6. **Verify**
    - `rag/chroma_store/` now exists — the persisted vector index.

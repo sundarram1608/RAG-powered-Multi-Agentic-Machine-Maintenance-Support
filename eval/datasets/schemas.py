@@ -18,7 +18,7 @@ ALLOWED_SOURCES = {
     "lulzbot_taz_pro_user_manual.pdf",
     "niosh_safe_3d_printing_2024-103.pdf",
 }
-INTENTS = {"troubleshoot", "analytics", "manage_incident", "general"}
+INTENTS = {"troubleshoot", "advice", "analytics", "manage_incident", "general"}
 MANAGE_ACTIONS = {"close", "assign", "update_comment", "unsupported"}
 
 

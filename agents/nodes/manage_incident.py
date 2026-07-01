@@ -14,8 +14,9 @@ The availability rules live HERE (the node), not the prompt: the LLM only extrac
 intent (action + named technician); the node enforces who is actually free.
 
 LLM (resolve): Groq Llama 3.3 70B. execute: no LLM.
-Tools: get_incident, list_available_technicians, book_technician_slot,
-       update_incident, send_email.
+Tools: get_incident, list_incidents, find_available_technician,
+       list_available_technicians, book_technician_slot, update_incident,
+       send_email.
 Input  (reads state): user_input (+ carried manage_plan on resume), current_user_id.
 Output (writes state): manage_plan (+ enrichment), needs_clarification /
        clarification_question / requires_approval; execute -> action_result;

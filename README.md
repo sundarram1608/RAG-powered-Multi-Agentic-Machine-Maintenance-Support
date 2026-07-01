@@ -67,8 +67,15 @@ python3 --version
 python3 -m venv preventivemaintenance3.11
 source preventivemaintenance3.11/bin/activate
 pip install -r requirements.txt
+cp .env.example .env      # then fill in your MySQL creds + free API keys
 deactivate
 ```
+
+> **Secrets:** `.env` holds real credentials and is **git-ignored** — only
+> `.env.example` (the template) is committed. Copy it to `.env` and fill in values
+> **before** the DB/seed steps below (the very first script, `generate_data.py`,
+> reads `DB_*` from `.env`). The DB-user step in §3 later writes the generated
+> `maint_readonly`/`maint_write` creds back into `.env`.
 
 ---
 
@@ -83,6 +90,11 @@ The **Knowledge Base** has two layers and both feed the context to the LLM agent
 > It's dual-purpose — a knowledge source *and* the operational system of record. Agent tools **read** facts from it **and write** to it at runtime (logging incidents, booking technician slots, recording incident outcomes). Only the `incidents` and `technician_schedule` tables are ever written; all other tables are read-only.
 >  - Full guide → [`synthetic_data/README.md`](synthetic_data/README.md)
 >  - (MySQL install/setup → [`synthetic_data/tables/readme_database_creation.md`](synthetic_data/tables/readme_database_creation.md))
+>
+> **First** install MySQL and create the empty `maintenance` schema (see the setup
+> guide above), and make sure `.env` has your `DB_*` creds — `generate_data.py`
+> connects to that database and builds the tables inside it; it does **not**
+> `CREATE DATABASE` for you.
 
   ```bash
   python synthetic_data/tables/generate_data.py

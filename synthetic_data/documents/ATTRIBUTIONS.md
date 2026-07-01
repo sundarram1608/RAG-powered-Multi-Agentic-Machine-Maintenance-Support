@@ -41,7 +41,8 @@ License: https://creativecommons.org/licenses/by-sa/4.0/
 |------|--------|---------|
 | `safety_guidelines/niosh_safe_3d_printing_2024-103.pdf` | NIOSH, *Approaches to Safe 3D Printing: A Guide for Makerspace Users, Schools, Libraries, and Small Businesses*, DHHS (NIOSH) Publication No. 2024-103 (Nov 2023) | **Public domain** |
 
-Source: https://www.cdc.gov/niosh/docs/2024-103/default.html
+Source (landing page): https://www.cdc.gov/niosh/docs/2024-103/default.html
+Downloaded from (direct PDF, used by `download_documents.py`): https://www.cdc.gov/niosh/docs/2024-103/pdfs/2024-103.pdf
 
 As a work of the U.S. federal government, this publication is in the **public domain** and
 carries no attribution or share-alike obligations. It is credited here for provenance only.
