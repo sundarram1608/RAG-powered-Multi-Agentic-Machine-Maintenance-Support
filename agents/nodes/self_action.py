@@ -34,16 +34,24 @@ async def _call(name: str, args: dict):
 
 
 def self_action_message(diagnosis: dict) -> str:
-    """Operator-facing guidance + the two-choice ask (surfaced via interrupt)."""
-    steps = (diagnosis or {}).get("fix_steps") or []
-    safety = (diagnosis or {}).get("safety_notes") or []
-    lines = ["Here's how to fix it yourself:"]
+    """Operator-facing guidance + the two-choice ask (surfaced via interrupt). Leads with
+    the reasoning (root cause), then the steps, then explains WHEN to pick each option."""
+    dx = diagnosis or {}
+    root = (dx.get("root_cause") or "").strip()
+    steps = dx.get("fix_steps") or []
+    safety = dx.get("safety_notes") or []
+    head = "This looks like something you can fix yourself"
+    head += f" — the likely cause is {root}." if root else "."
+    lines = [head, "Here's how:"]
     lines += [f"  {i}. {step}" for i, step in enumerate(steps, 1)]
     if safety:
         lines.append("\nSafety precautions:")
         lines += [f"  - {note}" for note in safety]
-    lines.append("\nWhen you're done, choose: [Complete & close service request] "
-                 "or [Book a technician instead].")
+    # explain each option, so the choice carries its reasoning (not just labels)
+    lines.append("\nOnce you've done this, choose **Complete & close service request** to "
+                 "close it out — or, if it didn't resolve the issue or you'd rather a "
+                 "technician handle it, choose **Book a technician instead** and I'll "
+                 "arrange a visit.")
     return "\n".join(lines)
 
 
