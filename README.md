@@ -144,14 +144,15 @@ Full guide → [`mcp_server/README.md`](mcp_server/README.md)
 
 ### 4. Agent layer — LangGraph workflow
 
-**12 specialized agents** are wired into one **LangGraph `StateGraph`** (14 nodes),
+**13 specialized agents** are wired into one **LangGraph `StateGraph`** (15 nodes),
 compiled with a `MemorySaver` checkpointer. The Input guard screens every turn; the
-**Supervisor** routes to one of four sub-flows:
+**Supervisor** routes to one of five sub-flows:
 
 - **troubleshoot** — Intake (resolve machine + symptom) → Diagnosis (RAG manual/safety + DB facts, corrective-RAG) → Verifier (independent RAG-triad + safety judge) → the `needs_technician` gate → **Self Action** (operator self-fix) / **Technician Action** (book + notify) / Decider.
+- **advice** — the **Advice** agent answers general/preventive/how-to questions ("what to do if the bed heats rapidly?") grounded in the safety guide, no machine or incident. If it's unclear whether the user is facing the fault now or just asking, it asks — and if they *are* facing it, it hands off to troubleshoot.
 - **analytics** — text-to-SQL Generator → independent Reviewer → execute (read-only) → answer.
 - **manage_incident** — resolve → approve → execute (close / assign / comment).
-- **general** — a capability/greeting reply.
+- **general** — a capability/greeting/farewell reply.
 
 Everything converges on a single **Output** agent (the "voice"), which renders
 fact-bearing replies from templates (no hallucinated ids/counts) and a final PII

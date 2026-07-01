@@ -188,7 +188,7 @@ and drops internal metadata (`mvc_code`, `doc_type`) the LLM doesn't need.
 - **What it does:** embeds `query`, runs a `doc_type='safety'`-filtered cosine search (**no `mvc_code` filter** — the safety guide applies to all models), flattens the top-k chunks.
 - **Input:** `query: str`, `k: int = 2`.
 - **Output:** `[{text, source_file, page_start, page_end, distance}, …]`.
-- **Used by:** Diagnosis, Guidance — called whenever a fix involves physically handling any hazard on the machine (agent-layer policy).
+- **Used by:** Diagnosis, Self Action, and the **Advice** agent (which grounds general/preventive guidance in the safety guide — it needs no `mvc_code`, so advice works without a machine).
 - **Edge cases:** empty index → `[]`; blank `query` → `[]`.
 
 ---

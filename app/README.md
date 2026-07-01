@@ -73,6 +73,10 @@ Pick an operator, then: **refusal** ("what's the capital of France?"), **general
 ("what can you do?"), **analytics** ("how many incidents are open?") — no interrupts;
 then a **troubleshoot** ("M03 prints aren't sticking") → `decision` → `choice` buttons,
 and a **manage** ("close incident inc_22, replaced the thermistor") → `approve`.
+Also try **advice** ("what should I do if the bed heats up too rapidly?") → a grounded,
+safety-first answer with no machine asked; and an **ambiguous** one ("the bed is heating
+rapidly") → a `clarify` ask "are you seeing this now, or asking?" — "yes, on M05" hands off
+to troubleshooting, "just asking" answers.
 For **6b**, watch the `st.status` step labels advance during a turn (e.g. analytics:
 "Writing a query…" → "Reviewing the query…" → "Fetching the data…" → "Writing the
 response…"). *(Needs Groq daily budget available — a rate-limited turn streams the

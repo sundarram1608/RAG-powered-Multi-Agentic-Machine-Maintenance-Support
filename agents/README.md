@@ -39,23 +39,25 @@ human-in-the-loop before anything irreversible.
 |---|---|---|---|---|
 | 1 | **Input** | Llama | — | scope + prompt-injection / PII-request guard |
 | 2 | **Supervisor** | Llama | — | route: troubleshoot / advice / analytics / manage_incident / general |
-| 2b | **Advice** | Llama | `safety_retrieval` | general/preventive/how-to questions: answer (grounded) · ask "facing it now?" · hand off to troubleshoot |
-| 3 | **Analytics** | Llama | `run_readonly_query` | coder: NL → read-only SQL; executor: run approved SQL |
-| 4 | **Text-to-SQL Reviewer** | **Gemini** | — | judge the SQL: grounded / relevant / safe; loop back if not |
-| 5 | **Manage Incident** | Llama | `get_incident`, `list_incidents`, `list_available_technicians`, `find_available_technician`, `book_technician_slot`, `update_incident`, `send_email` | direct action on a KNOWN incident (close, assign/reassign, update) |
-| 6 | **Intake** | Llama | `get_machine` | resolve & validate machine; clarify if needed |
-| 7 | **Diagnosis** | Llama | RAG + DB read tools | gather evidence (corrective-RAG) → root cause + fix |
-| 8 | **Verifier** | **Gemini** | — | judge groundedness/relevance/safety; loop back if weak |
-| 9 | **Decider** | Llama | — | ask the user: self-fix or technician? |
-| 10 | **Self Action** | Llama | RAG + `create_incident`, `update_incident` | guide the operator (with safety); log a self-resolved incident |
-| 11 | **Technician Action** | Llama | `find_available_technician`, `create_incident`, `book_technician_slot`, `update_incident`, `send_email` | book a technician/supervisor, update tables, notify |
-| 12 | **Output** | Llama | — | compose ALL final replies (+ mid-flow asks via interrupt); final PII scrub |
+| 3 | **Advice** | Llama | `safety_retrieval` | general/preventive/how-to questions: answer (grounded) · ask "facing it now?" · hand off to troubleshoot |
+| 4 | **Analytics** | Llama | `run_readonly_query` | coder: NL → read-only SQL; executor: run approved SQL |
+| 5 | **Text-to-SQL Reviewer** | **Gemini** | — | judge the SQL: grounded / relevant / safe; loop back if not |
+| 6 | **Manage Incident** | Llama | `get_incident`, `list_incidents`, `list_available_technicians`, `find_available_technician`, `book_technician_slot`, `update_incident`, `send_email` | direct action on a KNOWN incident (close, assign/reassign, update) |
+| 7 | **Intake** | Llama | `get_machine` | resolve & validate machine; clarify if needed |
+| 8 | **Diagnosis** | Llama | RAG + DB read tools | gather evidence (corrective-RAG) → root cause + fix |
+| 9 | **Verifier** | **Gemini** | — | judge groundedness/relevance/safety; loop back if weak |
+| 10 | **Decider** | Llama | — | ask the user: self-fix or technician? |
+| 11 | **Self Action** | Llama | RAG + `create_incident`, `update_incident` | guide the operator (with safety); log a self-resolved incident |
+| 12 | **Technician Action** | Llama | `find_available_technician`, `create_incident`, `book_technician_slot`, `update_incident`, `send_email` | book a technician/supervisor, update tables, notify |
+| 13 | **Output** | Llama | — | compose ALL final replies (+ mid-flow asks via interrupt); final PII scrub |
 
 **Flow (narrative):** user turn → **Input** (scope/safety) → **Supervisor** routes →
 *analytics* = **Analytics** (coder) → **Text-to-SQL Reviewer** → *(approved)*
 **Analytics** (execute) → **Output**; *(reviewer-reject or DB-error loops back to
-the coder, capped at `ANALYTICS_MAX_ATTEMPTS`)*. *manage_incident* = **Manage
-Incident** (approval interrupt before writes) → **Output**; *general* = direct
+the coder, capped at `ANALYTICS_MAX_ATTEMPTS`)*. *advice* = **Advice** (grounded
+general/preventive guidance; asks "facing it now or just asking?" when unclear, and
+hands off to troubleshoot if the user is facing it) → **Output**; *manage_incident* =
+**Manage Incident** (approval interrupt before writes) → **Output**; *general* = direct
 **Output**; *troubleshoot* = **Intake** (clarify via interrupt if details missing)
 → **Diagnosis** (RAG + DB) → **Verifier** (retry loop, capped at
 `VERIFY_MAX_ATTEMPTS`) → **Decider** (asks the user) → **Self Action** *or*
@@ -223,16 +225,26 @@ The plumbing every node stands on (no nodes yet):
 - **Prompt:** `prompts/input.py` · v1.2.0 (context-aware follow-ups; farewells/sign-offs are benign small-talk not injection; judge the latest message on its own merits — a prior refusal doesn't taint the next).
 
 ### 2. Supervisor Agent — `nodes/supervisor.py`  ✅
-- **Purpose:** the intent router — classify the (already-guarded) turn into exactly one of four routes. Pure router; never answers or acts.
+- **Purpose:** the intent router — classify the (already-guarded) turn into exactly one of five routes. Pure router; never answers or acts.
 - **LLM:** **Groq Llama 3.3 70B** (reasoner).
 - **Tools:** none.
 - **Input format** (state keys read): `user_input` (else the last `messages` entry) + the recent `messages` window (last 5 exchanges) for follow-up context.
-- **Output format** (Pydantic `Route` via `with_structured_output`) → writes state: `intent` (`"troubleshoot" | "analytics" | "manage_incident" | "general"`), `prompt_versions["supervisor"]`.
-- **Routing:** `troubleshoot` → **Intake** · `analytics` → **Analytics** · `manage_incident` → **Manage Incident** · `general` → **Output**.
-- **Edge cases:** READ data question → `analytics`, WRITE/action on a known record → `manage_incident`; a symptom that needs diagnosing → `troubleshoot` (even if "log it" is mentioned); capability/greeting → `general`; ambiguous-but-actionable → `troubleshoot` (Intake clarifies, avoiding dead-ends); a brief follow-up routes to its referent's path (e.g. after listing incidents, "which are mine?" → `analytics`).
-- **Prompt:** `prompts/supervisor.py` · v1.2.0 (opening/"booking" a NEW incident routes to troubleshoot, not manage; context-aware — routes a follow-up to its referent's path).
+- **Output format** (Pydantic `Route` via `with_structured_output`) → writes state: `intent` (`"troubleshoot" | "advice" | "analytics" | "manage_incident" | "general"`), `prompt_versions["supervisor"]`.
+- **Routing:** `troubleshoot` → **Intake** · `advice` → **Advice** · `analytics` → **Analytics** · `manage_incident` → **Manage Incident** · `general` → **Output**.
+- **Edge cases:** a CURRENT fault → `troubleshoot`; a general/preventive/how-to or hypothetical question → `advice`; **unsure current-fault vs asking → `advice`** (it confirms with the user rather than demanding a machine); READ data question → `analytics`; WRITE/action on a known record → `manage_incident`; capability/greeting/farewell → `general`; a brief follow-up routes to its referent's path (e.g. after listing incidents, "which are mine?" → `analytics`).
+- **Prompt:** `prompts/supervisor.py` · v1.3.0 (adds the `advice` route; ambiguous fault-vs-advice → advice; context-aware follow-ups).
 
-### 3. Analytics Agent (Text-to-SQL coder + executor) — `nodes/analytics.py`  ✅
+### 3. Advice Agent — `nodes/advice.py`  ✅
+- **Purpose:** answer general / preventive / how-to / hypothetical FDM questions ("what to do if the bed heats rapidly?", "how do I prevent clogs?") that are NOT a current fault — with **no machine and no incident**. A first-class agent (own node + prompt + structured output), a peer of Analytics.
+- **LLM:** **Groq Llama 3.3 70B** (triage). **Tool:** `safety_retrieval` (machine-agnostic) on the answer path; the grounded reply is composed by the **Output** agent in *advice* mode.
+- **Input format** (state read): `user_input`, the recent `messages` window + the prior `clarification_question` (so a disambiguating reply is read IN CONTEXT).
+- **Output format** (Pydantic `AdvicePlan` via `with_structured_output`) → `advice_route` (`answer`/`ask`/`troubleshoot`), `advice_topic`, `clarification_question`/`needs_clarification` (ask), `retrieved_context` (answer), or `intent="troubleshoot"`+`symptom` (handoff); tags `prompt_versions["advice"]`.
+- **Routing:** answer → **Output** (advice mode) · ask → interrupt, then re-triage the reply · troubleshoot handoff → **Intake** (`route_after_advice`).
+- **Disambiguation (LLM-based, no regex):** when it's unclear whether the user is FACING the fault now or just asking, `route="ask"` → the graph interrupts with one question ("Are you seeing this on a machine right now — I can diagnose it — or asking for general guidance?"); the reply is re-classified using the conversation + that question — "yes, on M05" → hand off to troubleshoot; "just asking" → answer. After the re-ask cap it answers generally rather than loop.
+- **Grounding:** the (machine-agnostic) **safety guide** via `safety_retrieval`, plus general best-practice; framed as guidance, not a machine-specific diagnosis.
+- **Prompt:** `prompts/advice.py` (`ADVICE_TRIAGE_SYSTEM`) · v1.0.0; the answer is rendered by `prompts/output.py` MODE=advice.
+
+### 4. Analytics Agent (Text-to-SQL coder + executor) — `nodes/analytics.py`  ✅
 - **Purpose:** answer read-only analytics questions by generating SQL (grounded in the schema) and, after the Reviewer approves, executing it. Result summarization is the **Output** agent's job.
 - **LLM:** **Groq Llama 3.3 70B** (generate phase); **no LLM** in the execute phase.
 - **Tools:** `run_readonly_query` (execute phase only).
@@ -253,7 +265,7 @@ The plumbing every node stands on (no nodes yet):
 - **Edge cases:** invented table/column → `grounded=False`; wrong computation for the question → `relevant=False`; write/`phone`/multi-statement → `safe=False`. Knows `REFERENCE_TODAY`, so it does **not** penalize correct use of the fixed reference date.
 - **Prompt:** `prompts/text_to_sql_reviewer.py` · v1.0.0.
 
-### 5. Manage Incident Agent — `nodes/manage_incident.py`  ✅
+### 6. Manage Incident Agent — `nodes/manage_incident.py`  ✅
 - **Purpose:** perform a **direct action on a KNOWN incident** (no diagnosis): **close** (mark complete), **assign/reassign** a technician, or **update_comment**. Two phases with an approval/clarification interrupt between.
 - **LLM:** **Groq Llama 3.3 70B** (`manage_resolve` planning only); `manage_execute` is mechanical (no LLM).
 - **Tools:** `get_incident`, `list_incidents`, `list_available_technicians`, `find_available_technician`, `book_technician_slot`, `update_incident`, `send_email`.
@@ -266,7 +278,7 @@ The plumbing every node stands on (no nodes yet):
 - **Other edge cases:** unknown id → clarify; **close requires a comment** → ask if missing (never invented); close an already-closed / assign to a closed incident → `unsupported`; reject at approval → no writes. **The browse picker** is a Markdown table incl. **Reported by / Assigned to** employee ids and is **scoped to OPEN incidents** (every manage action applies to an open incident; closed-incident history is a read/analytics question).
 - **Prompts:** `prompts/manage_incident.py` — `MANAGE_RESOLVE` v1.3.0 (plan the action) + `CLARIFY_INTERP` v1.0.0 (interpret an ambiguous reply → `ClarifyReply`).
 
-### 6. Intake Agent — `nodes/intake.py`  ✅
+### 7. Intake Agent — `nodes/intake.py`  ✅
 - **Purpose:** the troubleshoot entry point — ensure a **valid machine** + a **symptom** before diagnosis; hand `mvc_code` + `symptom` to Diagnosis.
 - **LLM:** **Groq Llama 3.3 70B** (reasoner).
 - **Tools:** `get_machine`.
@@ -277,7 +289,7 @@ The plumbing every node stands on (no nodes yet):
 - **Edge cases:** missing machine id → ask which machine; unknown machine (`exists: False`) → ask to confirm the id; **Decommissioned** → ask if the machine number is correct; missing symptom → ask what the problem is; **Under Maintenance / Idle** still proceed. **Reply intent is LLM-judged** (the Intake LLM returns `user_stuck` / `user_quit`, no extra call): a "don't know / can't find" reply (`user_stuck`) → explain *how to get* the info (asset label / maintenance log / supervisor); an explicit abandon / topic-switch (`user_quit`) → stop cleanly (`clarify_abandoned` → Output). A bare **acknowledgement** ("ok", "got it", "thanks") is **not** a quit — it continues (re-ask). The intake wrapper no longer uses an `is_bail` shortcut (the LLM decides in context). After the re-ask cap, a give-up message routes to Output rather than diagnosing with no machine.
 - **Prompt:** `prompts/intake.py` · v1.2.0 (`user_stuck` / `user_quit`; acknowledgement ≠ quit).
 
-### 7. Diagnosis Agent — `nodes/diagnosis.py`  ✅
+### 8. Diagnosis Agent — `nodes/diagnosis.py`  ✅
 - **Purpose:** the core reasoner — given `mvc_code` + `symptom`, gather evidence and produce a **grounded** `Diagnosis` (root cause + fix). Feeds the Verifier.
 - **LLM:** **Groq Llama 3.3 70B** (synthesis only — the node calls the tools).
 - **Tools:** `user_manual_retrieval`, `safety_retrieval`, `get_overdue_status`, `get_maintenance_history`, `get_incident_history`, `check_inventory`.
@@ -288,7 +300,7 @@ The plumbing every node stands on (no nodes yet):
 - **Edge cases:** weak manual coverage → `low` confidence → CRAG re-query; **overdue** machine weighted as a strong signal; prior incident reused; grounds strictly in provided evidence (Verifier enforces). `safety_retrieval` is always called; the LLM keeps only *relevant* `safety_notes`.
 - **Prompt:** `prompts/diagnosis.py` · v1.0.0.
 
-### 8. Verifier Agent — `nodes/verifier.py`  ✅
+### 9. Verifier Agent — `nodes/verifier.py`  ✅
 - **Purpose:** independent **LLM-as-judge** over the Diagnosis, using the **RAG triad(context relevance, groundedness, answer relevance)) + safety** across two relationships: *context↔query* and *diagnosis↔context/query*.
 
 | Description | Standard name | What it checks |
@@ -307,7 +319,7 @@ The plumbing every node stands on (no nodes yet):
 - **Edge cases:** ungrounded/irrelevant claim → reject with actionable issues; off-topic retrieval → `context_relevant=False`; fix contradicts safety → `safe=False`; strict default (not-approved when unsure).
 - **Prompt:** `prompts/verifier.py` · v1.0.0.
 
-### 9. Decider Agent — `nodes/decider.py`  ✅
+### 10. Decider Agent — `nodes/decider.py`  ✅
 - **Purpose:** decide who fixes it. **Reached ONLY when the diagnosis is operator-fixable** (`needs_technician == False`) — when technician-required, the graph routes straight to **Technician Action** with no question. For operator-fixable, it asks the operator: guided self-fix or assign a technician?
 - **LLM:** **Groq Llama 3.3 70B** (interpret the reply). **Tools:** none.
 - **Flow:** the graph asks via `interrupt()` using `decider_question(diagnosis)` ("This looks like something you can safely fix yourself: …; do it yourself, or assign a technician?"); `decider_node` then interprets the reply.
@@ -316,7 +328,7 @@ The plumbing every node stands on (no nodes yet):
 - **Edge cases:** hesitation/safety doubt → `technician` (safe default); genuinely unclear reply → re-ask; never reached when technician-required.
 - **Prompt:** `prompts/decider.py` · v1.0.0.
 
-### 10. Self Action Agent — `nodes/self_action.py`  ✅
+### 11. Self Action Agent — `nodes/self_action.py`  ✅
 - **Purpose:** the operator self-fix path (Decider → `self`). Present the **verified** fix guidance, then — on the operator's choice — either log a **self-resolved incident** or hand off to Technician Action.
 - **LLM:** none (mechanical). **Tools:** `create_incident`, `update_incident`.
 - **Guidance (Option A — reuse):** shows `diagnosis.fix_steps` + `safety_notes` (already grounded + Verifier-approved) via `self_action_message()` — **no re-retrieval** (keeps it fast; content is trusted). Output renders the final confirmation.
@@ -327,7 +339,7 @@ The plumbing every node stands on (no nodes yet):
 - **Edge cases:** `current_user_id` missing / `create_incident` validation fails → `action_result.action = "error"`; incident logged closed same-day; uses the `update_incident` `assignee_id` extension (operator as resolver, no booking).
 - **Prompt:** none (mechanical node).
 
-### 11. Technician Action Agent — `nodes/technician_action.py`  ✅
+### 12. Technician Action Agent — `nodes/technician_action.py`  ✅
 - **Purpose:** the dispatch path — reached when technician-required (Diagnosis `needs_technician`), Decider→technician, or Self Action→"book a technician instead". **Always creates the incident** (it doesn't exist yet on any of these paths), auto-assigns, books, and notifies. **Mechanical — no LLM, no approval, no interrupt** (the dispatch was already decided upstream).
 - **LLM:** none. **Tools:** `create_incident`, `find_available_technician`, `book_technician_slot`, `update_incident` (allow-listed; unused at dispatch), `send_email`.
 - **Flow:** `create_incident(reported_by=operator)` → `find_available_technician` (3-day hierarchy → **supervisor escalation** if none) → `book_technician_slot` → `send_email` to **assignee + operator**. The incident stays **open** (the assignee closes it later via Manage Incident).
@@ -336,7 +348,7 @@ The plumbing every node stands on (no nodes yet):
 - **Edge cases:** no technician in 3 days → supervisor escalation; no active staff at all → `no_assignee`; `create_incident` fails → `error`.
 - **Prompt:** none (mechanical node).
 
-### 12. Output Agent — `nodes/output.py`  ✅
+### 13. Output Agent — `nodes/output.py`  ✅
 - **Purpose:** the single voice — compose the **final user-facing reply** for every terminal path, then a final **PII scrub**.
 - **Grounding (Option A):** fact-heavy paths are rendered by **templates** in the node (ids/names/dates/counts verbatim from state — cannot be hallucinated); the **LLM** is used ONLY for `general` and `analytics`. LLM: Groq Llama 3.3 70B. **Tools:** none.
 - **Per-path rendering** (what produces each reply, and where):
@@ -352,11 +364,11 @@ The plumbing every node stands on (no nodes yet):
   | manage_incident | template | `output_node._manage()` |
 
   > Note: `OUTPUT_SYSTEM` (`prompts/output.py`) deliberately covers **only** the two LLM modes (general + analytics) — under Option A the templated paths above are produced in code, not by the prompt.
-- **Input format** (state read): `intent`, `input_safe`, `guard_reason`, `user_input`, `diagnosis`, `action_result`, `manage_plan`, `sql_result`, `verifier_exhausted`. **Output format:** `final_response` (str, PII-scrubbed); tags `prompt_versions["output"]`.
+- **Input format** (state read): `intent`, `input_safe`, `guard_reason`, `user_input`, `diagnosis`, `action_result`, `manage_plan`, `sql_result`, `verifier_exhausted`, and (advice mode) `advice_topic` + `retrieved_context`. **Output format:** `final_response` (str, PII-scrubbed); tags `prompt_versions["output"]`.
 - **PII scrub:** regex strips any email / 7+-digit phone from the final text (belt-and-suspenders; tools already keep PII out of state).
 - **Verifier exhaustion:** routed to Technician Action (auto-dispatch); Output states a technician will assess it (no apologetic caveat).
 - **Edge cases:** empty analytics result → "no matching records"; `error` action → generic apology. Systematic faithfulness eval deferred to Phase 5.
-- **Prompt:** `prompts/output.py` · v1.4.0 (general + analytics; analytics multi-row -> table; incident tables include complaint + reporter/assignee employee-id columns).
+- **Prompt:** `prompts/output.py` · v1.5.0 (general + analytics + **advice** modes; analytics multi-row → table with complaint + reporter/assignee columns; advice = grounded safety-first guidance).
 
 ## Graph assembly (Phase 4c)
 
@@ -387,7 +399,7 @@ are registered as thin **interrupt wrappers** around the plain, standalone-teste
 node functions — the wrappers add `interrupt()`; the agents' logic is unchanged.
 
 ### 2. Topology
-Compiled graph — **17 nodes** (15 agents + start/end), **31 edges**. Conditional
+Compiled graph — **17 nodes** (15 agent-nodes — 13 agents, with Analytics and Manage each spanning 2 nodes — + start/end), **31 edges**. Conditional
 edges are labelled with their routing condition; unlabelled edges are
 unconditional. The four amber nodes pause for the user (LangGraph `interrupt()`).
 Regenerate the raw export any time with `python agents/graph.py`.

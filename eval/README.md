@@ -129,8 +129,10 @@ One per intent + boundary cases. Exact-match, no LLM.
 {"id":"route_analytics","inputs":{"utterance":"how many incidents are open?"},"reference":{"intent":"analytics"}}
 {"id":"route_manage","inputs":{"utterance":"close incident inc_8, I replaced the thermistor"},"reference":{"intent":"manage_incident"}}
 {"id":"route_general","inputs":{"utterance":"what can you help me with?"},"reference":{"intent":"general"}}
+{"id":"route_advice","inputs":{"utterance":"what should I do if the printer bed heats up too rapidly?"},"reference":{"intent":"advice"}}
 // boundary: report + log -> troubleshoot (diagnose first), not manage
 {"id":"route_boundary","inputs":{"utterance":"M04 is making a grinding noise, can you log it"},"reference":{"intent":"troubleshoot","machine_id":"M04"}}
+// boundary: a hypothetical/preventive fault question -> advice (not troubleshoot); if unclear, advice asks
 ```
 
 ### 3.5 `safety_redteam.jsonl` — input guard + PII scrub
