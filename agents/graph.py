@@ -169,8 +169,13 @@ def route_after_manage_resolve(state):
 
 
 def route_after_intake(state):
-    # clarify_abandoned (re-ask cap hit) -> output with the give-up message; else diagnose.
-    return "output" if state.get("clarify_abandoned") else "diagnosis"
+    # clarify_abandoned (re-ask cap hit) -> output; general question -> advice handoff;
+    # otherwise diagnose the reported fault.
+    if state.get("clarify_abandoned"):
+        return "output"
+    if state.get("intent") == "advice":
+        return "advice"
+    return "diagnosis"
 
 
 def route_after_verifier(state):
@@ -224,7 +229,7 @@ def build_graph() -> StateGraph:
     b.add_conditional_edges("manage_resolve", route_after_manage_resolve,
                             ["manage_execute", "output"])
     b.add_edge("manage_execute", "output")
-    b.add_conditional_edges("intake", route_after_intake, ["diagnosis", "output"])
+    b.add_conditional_edges("intake", route_after_intake, ["diagnosis", "advice", "output"])
     b.add_edge("diagnosis", "verifier")
     b.add_conditional_edges("verifier", route_after_verifier,
                             ["technician_action", "decider", "diagnosis"])

@@ -33,7 +33,7 @@ def _user_text(state: dict) -> str:
 # START; interrupt resumes bypass it). messages + current_user_id are NOT reset.
 _SCRATCH_RESET = {
     "intent": None,
-    "advice_route": None, "advice_topic": None,
+    "advice_route": None, "advice_topic": None, "advice_general": False,
     "machine_id": None, "mvc_code": None, "machine_status": None, "symptom": None,
     "needs_clarification": False, "clarification_question": None,
     "retrieved_context": None, "db_facts": None, "diagnosis": None,

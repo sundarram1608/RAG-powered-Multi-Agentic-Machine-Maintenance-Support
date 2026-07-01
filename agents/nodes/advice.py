@@ -44,6 +44,10 @@ async def advice_node(state: dict) -> dict:
     context = history.format_recent((state.get("messages") or [])[:-1], max_exchanges=5)
     prior_q = state.get("clarification_question")
     human = ""
+    if state.get("advice_general"):   # intake already confirmed this is a general question
+        human += ("NOTE: it's already established the user is asking GENERALLY, not about a "
+                  "machine they're operating now — do NOT ask whether they're facing it. If "
+                  "they've named a topic, answer it; otherwise ask what they'd like to know.\n\n")
     if context:
         human += f"Recent conversation:\n{context}\n\n"
     if prior_q:

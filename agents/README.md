@@ -245,7 +245,7 @@ The plumbing every node stands on (no nodes yet):
 - **Routing:** answer → **Output** (advice mode) · ask → interrupt, then re-triage the reply · troubleshoot handoff → **Intake** (`route_after_advice`).
 - **Disambiguation (LLM-based, no regex):** when it's unclear whether the user is FACING the fault now or just asking, `route="ask"` → the graph interrupts with one question ("Are you seeing this on a machine right now — I can diagnose it — or asking for general guidance?"); the reply is re-classified using the conversation + that question — "yes, on M05" → hand off to troubleshoot; "just asking" → answer. After the re-ask cap it answers generally rather than loop.
 - **Grounding:** the (machine-agnostic) **safety guide** via `safety_retrieval`, plus general best-practice; framed as guidance, not a machine-specific diagnosis.
-- **Prompt:** `prompts/advice.py` (`ADVICE_TRIAGE_SYSTEM`) · v1.0.0; the answer is rendered by `prompts/output.py` MODE=advice.
+- **Prompt:** `prompts/advice.py` (`ADVICE_TRIAGE_SYSTEM`) · v1.1.0; the answer is rendered by `prompts/output.py` MODE=advice.
 
 ### 4. Analytics Agent (Text-to-SQL coder + executor) — `nodes/analytics.py`  ✅
 - **Purpose:** answer read-only analytics questions by generating SQL (grounded in the schema) and, after the Reviewer approves, executing it. Result summarization is the **Output** agent's job.
@@ -289,8 +289,8 @@ The plumbing every node stands on (no nodes yet):
 - **Input format** (state read): `user_input`, carried `machine_id`/`symptom` on resume, the recent `messages` window + the prior `clarification_question` (so the LLM interprets a reply like "Got it"/"yes"/"that one" *in context*, not blindly).
 - **Output format** (Pydantic `Intake`, enriched) → state: `machine_id`, `mvc_code`, `machine_status`, `symptom`, `needs_clarification`, `clarification_question`; tags `prompt_versions["intake"]`.
 - **Routing:** `needs_clarification = True` → clarification interrupt (ask) → re-enter on reply (carries the part already gathered); `False` → **Diagnosis**.
-- **Edge cases:** missing machine id → ask which machine; unknown machine (`exists: False`) → ask to confirm the id; **Decommissioned** → ask if the machine number is correct; missing symptom → ask what the problem is; **Under Maintenance / Idle** still proceed. **Reply intent is LLM-judged** (the Intake LLM returns `user_stuck` / `user_quit`, no extra call): a "don't know / can't find" reply (`user_stuck`) → explain *how to get* the info (asset label / maintenance log / supervisor); an explicit abandon / topic-switch (`user_quit`) → stop cleanly (`clarify_abandoned` → Output). A bare **acknowledgement** ("ok", "got it", "thanks") is **not** a quit — it continues (re-ask). The intake wrapper no longer uses an `is_bail` shortcut (the LLM decides in context). After the re-ask cap, a give-up message routes to Output rather than diagnosing with no machine.
-- **Prompt:** `prompts/intake.py` · v1.2.0 (`user_stuck` / `user_quit`; acknowledgement ≠ quit).
+- **Edge cases:** missing machine id → ask which machine; unknown machine (`exists: False`) → ask to confirm the id; **Decommissioned** → ask if the machine number is correct; missing symptom → ask what the problem is; **Under Maintenance / Idle** still proceed. **Reply intent is LLM-judged** (the Intake LLM returns `user_stuck` / `user_quit` / `general_question`, no extra call): a "don't know / can't find" reply (`user_stuck`) → explain *how to get* the info (asset label / maintenance log / supervisor); **"no, I'm just asking for my own knowledge"** (`general_question`) → **hand off to Advice** (`intent="advice"`, `advice_general=True` so Advice asks the topic, not "facing it now?") — not a quit; an explicit abandon (`user_quit`) → stop cleanly (`clarify_abandoned` → Output). A bare **acknowledgement** ("ok", "got it", "thanks") is **not** a quit — it continues (re-ask). The intake wrapper no longer uses an `is_bail` shortcut (the LLM decides in context). After the re-ask cap, a give-up message routes to Output rather than diagnosing with no machine.
+- **Prompt:** `prompts/intake.py` · v1.3.0 (user_stuck / user_quit; acknowledgement ≠ quit; general_question -> advice handoff).
 
 ### 8. Diagnosis Agent — `nodes/diagnosis.py`  ✅
 - **Purpose:** the core reasoner — given `mvc_code` + `symptom`, gather evidence and produce a **grounded** `Diagnosis` (root cause + fix). Feeds the Verifier.
@@ -402,7 +402,7 @@ are registered as thin **interrupt wrappers** around the plain, standalone-teste
 node functions — the wrappers add `interrupt()`; the agents' logic is unchanged.
 
 ### 2. Topology
-Compiled graph — **17 nodes** (15 agent-nodes — 13 agents, with Analytics and Manage each spanning 2 nodes — + start/end), **31 edges**. Conditional
+Compiled graph — **17 nodes** (15 agent-nodes — 13 agents, with Analytics and Manage each spanning 2 nodes — + start/end), **32 edges**. Conditional
 edges are labelled with their routing condition; unlabelled edges are
 unconditional. The four amber nodes pause for the user (LangGraph `interrupt()`).
 Regenerate the raw export any time with `python agents/graph.py`.
@@ -434,6 +434,7 @@ flowchart TD
     manage_execute --> output
 
     intake -->|resolved| diagnosis[diagnosis]
+    intake -->|general question| advice
     intake -->|can't get info| output
     diagnosis --> verifier[verifier]
     verifier -->|approved, needs technician| technician_action[technician_action]
@@ -471,7 +472,7 @@ Each is a pure `state → next_node_name`:
 | `route_after_advice` | `intake` if `advice_route=="troubleshoot"` (user is facing it now) else `output` (answer) |
 | `route_after_reviewer` | `analytics_execute` if approved · `analytics_generate` if `attempts<3` · else `output` |
 | `route_after_analytics_execute` | `output` if `sql_result.ok` · `analytics_generate` if `attempts<3` · else `output` |
-| `route_after_intake` | `output` if `clarify_abandoned` (re-ask cap hit) else `diagnosis` |
+| `route_after_intake` | `output` if `clarify_abandoned` · `advice` if the user is just asking (intake `general_question` handoff) · else `diagnosis` |
 | `route_after_manage_resolve` | `output` if action ∈ {unsupported, cancelled} else `manage_execute` |
 | `route_after_verifier` | approved → (`technician_action` if `needs_technician` else `decider`); reject & `attempts<3` → `diagnosis`; else → `technician_action` |
 | `route_after_decider` | `self_action` if `decision_path=="self"` else `technician_action` |

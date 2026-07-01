@@ -77,6 +77,13 @@ async def intake_node(state: dict) -> dict:
         HumanMessage(content=human),
     ])
 
+    # Not a live fault on a specific machine — they're asking generally -> hand off to
+    # the Advice path (mirror of advice's troubleshoot handoff); no machine needed.
+    if extracted.general_question:
+        return {"intent": "advice", "needs_clarification": False, "advice_general": True,
+                "symptom": extracted.symptom or state.get("symptom"),
+                "prompt_versions": versions}
+
     # The LLM read the reply's intent: bail / change-topic -> stop cleanly (the regex
     # fast-path in the graph wrapper catches obvious "ok"/"cancel"; this catches the rest).
     if extracted.user_quit:

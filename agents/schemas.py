@@ -56,7 +56,8 @@ class Intake(BaseModel):
     needs_clarification: bool = Field(description="True if the machine id or symptom is missing, ambiguous, or the machine doesn't exist / is decommissioned.")
     question: Optional[str] = Field(default=None, description="The single clarifying question to ask the user when needs_clarification is True.")
     user_stuck: bool = Field(default=False, description="True if the user's latest reply says they DON'T KNOW / can't find the asked-for info (e.g. 'I don't know the machine id', 'not sure', 'can't find it') — so we should explain how to get it rather than just re-ask.")
-    user_quit: bool = Field(default=False, description="True ONLY if the reply ABANDONS this request — an explicit cancel ('never mind', 'stop', 'forget it', 'cancel') or switching to a clearly unrelated request. A bare ACKNOWLEDGEMENT ('ok', 'got it', 'thanks', 'sure', 'will do') is NOT a quit — the user is continuing and will give the machine/symptom next, so user_quit stays False.")
+    user_quit: bool = Field(default=False, description="True ONLY if the reply ABANDONS this request — an explicit cancel ('never mind', 'stop', 'forget it', 'cancel'). A bare ACKNOWLEDGEMENT ('ok', 'got it', 'thanks') is NOT a quit; nor is asking generally (see general_question). user_quit stays False when the user is still engaging.")
+    general_question: bool = Field(default=False, description="True if the user reveals they are NOT fixing a fault on a specific machine right now but asking GENERALLY / for their own knowledge / hypothetically (e.g. 'no, I'm just asking for my own knowledge', 'I don't have a specific machine, just curious', 'what would generally cause X?'). This is handed off to the advice path — it is NOT a quit.")
 
 
 class Diagnosis(BaseModel):

@@ -28,6 +28,7 @@ class State(TypedDict, total=False):
     # --- advice (general/preventive how-to) ---
     advice_route: Optional[str]                # "answer" | "ask" | "troubleshoot" (handoff)
     advice_topic: Optional[str]                # the maintenance topic, for retrieval + the answer
+    advice_general: bool                       # intake confirmed it's a general question (skip "facing it now?")
 
     # --- intake ---
     machine_id: Optional[str]
