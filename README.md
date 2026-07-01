@@ -187,7 +187,11 @@ python agents/run.py
 python agents/test_e2e.py
 python agents/test_routing.py
 ```
-Full guide (topology, every edge, interrupts, turn/memory model) → [`agents/README.md`](agents/README.md)
+This layer was built in three sub-phases: **4a** foundations (`config`, `llms`,
+`state`, `schemas`, `mcp_client`) → **4b** the 13 agents (each standalone-tested) →
+**4c** graph assembly (wiring, conditional edges, interrupt wrappers).
+Full guide (topology, every edge, interrupts, turn/memory model, the 4a/4b/4c
+breakdown) → [`agents/README.md`](agents/README.md)
 
 ### 5. Observability, Evaluation & Governance (Phase 5)
 

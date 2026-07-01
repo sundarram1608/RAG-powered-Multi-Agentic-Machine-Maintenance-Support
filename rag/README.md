@@ -20,8 +20,9 @@ space. Retrieval adds a **cross-encoder reranker** (`bge-reranker-v2-m3`) on top
 > reorders the candidates — it does **not** touch the stored embeddings, the
 > ingestion pipeline, or the index, so it needs no re-ingestion and can be tuned
 > or removed freely. Systematic RAG **evaluation** (context precision/recall,
-> faithfulness) is added in **Phase 5** with LangSmith, which will validate/tune
-> the reranker (candidate count, `max_length`) — or disable it if it doesn't help.
+> faithfulness) was added in **Phase 5** with LangSmith (see [`eval/`](../eval/)),
+> which validates/tunes the reranker (candidate count, `max_length`) — or disables
+> it if it doesn't help.
 
 ## Directory
 

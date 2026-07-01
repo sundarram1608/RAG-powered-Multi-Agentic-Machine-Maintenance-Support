@@ -8,7 +8,8 @@ human-in-the-loop before anything irreversible.
 
 > Build status: **Phase 4 ✅** — all 13 agents built + the compiled LangGraph
 > workflow (see the **Graph assembly (Phase 4c)** section for the embedded diagram).
-> (Project-wide: Phases 0–5 complete; the Streamlit app is Phase 6.)
+> (Project-wide: **Phases 0–6 all complete** — the observability / evaluation /
+> governance layer is Phase 5 and the Streamlit app is Phase 6; see the root README.)
 
 ---
 
@@ -83,7 +84,7 @@ and emit a live activity feed — `decision` lines (per-agent summaries from `up
 - `thread_id` = one chat (memory + pause/resume via the checkpointer).
 - `user_id` = the logged-in operator's `employee_id` (drives `create_incident(reported_by=…)` and notifications — set from login, never asked in chat).
 - `interrupt()` points (Intake clarify, Advice "facing it now?" disambiguation, Decider choice, Self-Action 2-button choice, Manage-Incident clarify / choose-technician / approve) surface as `needs_input`/`needs_approval`; the app renders a prompt / buttons / Approve-Reject and calls `resume_turn`. (Technician-Action is mechanical — no LLM, no approval interrupt.)
-- **Now:** a CLI driver ([`run.py`](run.py)) calls these. **Phase 6:** Streamlit wraps the *same* functions — no graph changes. The returned `run_id` lets the UI attach feedback (`observability.log_feedback`).
+- **Callers:** a CLI driver ([`run.py`](run.py)) and the **Phase 6 Streamlit app** ([`app/`](../app/)) both call these *same* functions — no graph changes. The returned `run_id` lets the UI attach feedback (`observability.log_feedback`).
 
 ## Memory & threads
 
@@ -370,7 +371,7 @@ The plumbing every node stands on (no nodes yet):
 - **Input format** (state read): `intent`, `input_safe`, `guard_reason`, `user_input`, `diagnosis`, `action_result`, `manage_plan`, `sql_result`, `verifier_exhausted`, `clarify_abandoned` (+ its pre-composed `final_response`, passed straight through when a clarify loop bailed/gave up), and (advice mode) `advice_topic` + `retrieved_context`. **Output format:** `final_response` (str, PII-scrubbed); tags `prompt_versions["output"]`.
 - **PII scrub:** regex strips any email / 7+-digit phone from the final text (belt-and-suspenders; tools already keep PII out of state).
 - **Verifier exhaustion:** routed to Technician Action (auto-dispatch); Output states a technician will assess it (no apologetic caveat).
-- **Edge cases:** empty analytics result → "no matching records"; `error` action → generic apology. Systematic faithfulness eval deferred to Phase 5.
+- **Edge cases:** empty analytics result → "no matching records"; `error` action → generic apology. Systematic faithfulness eval is handled in Phase 5 (`eval/` troubleshoot faithfulness/answer-relevance judges).
 - **Prompt:** `prompts/output.py` · v1.5.0 (general + analytics + **advice** modes; analytics multi-row → table with complaint + reporter/assignee columns; advice = grounded safety-first guidance).
 
 ## Graph assembly (Phase 4c)
@@ -503,7 +504,7 @@ every clarification and risk re-routing). The other 10 nodes never pause.
 | `manage_resolve` | `clarify` / `approve` | the reply, or `"approve"`/`"reject"` (reject → cancelled → output); cap 6 (`MAX_CLARIFY + 2`, for its clarify→choose-tech→approve sub-steps) |
 
 ### 5. Turn & memory model
-- **`thread_id` = one conversation.** `MemorySaver` isolates state per thread (dev; swap to `SqliteSaver` for persistence in Phase 6).
+- **`thread_id` = one conversation.** `MemorySaver` isolates state per thread. The Phase 6 app still uses `MemorySaver` (module-level, so paused turns survive Streamlit reruns but not a process restart); swap to `SqliteSaver` for cross-restart persistence.
 - **Within a request,** interrupts pause/resume on the *same* thread — no upstream re-runs.
 - **A new request** re-enters at `input`, which **resets the per-request scratch** (`machine_id, symptom, diagnosis, verdict, action_result, sql_*, manage_plan, decision_path, *_attempts, verifier_exhausted`) while keeping `messages` + `current_user_id`. So a new request never inherits a stale diagnosis. *(Resumes bypass `input`, so they don't reset.)*
 
