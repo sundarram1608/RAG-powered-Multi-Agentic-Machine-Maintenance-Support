@@ -43,28 +43,45 @@ def _llm(mode: str, body: str) -> str:
 
 # --- templated (deterministic) renderers for the fact-heavy paths ---
 
+# Templated resolution replies. Each: (1) ANSWERS "can I fix it myself?", (2) gives the
+# REASONING (the verified diagnosis' root cause), then (3) ties that to the ACTION taken.
 def _self_resolved(state: dict) -> str:
     dx = state.get("diagnosis", {})
     inc = (state.get("action_result") or {}).get("incident_id")
-    lines = ["Here's how to fix it yourself:"]
+    root = (dx.get("root_cause") or "").strip()
+    head = "Yes — you can safely fix this one yourself."
+    if root:
+        head += f" The likely cause is {root}."
+    lines = [head, "Here's how:"]
     lines += [f"  {i}. {s}" for i, s in enumerate(dx.get("fix_steps") or [], 1)]
     for note in dx.get("safety_notes") or []:
         lines.append(f"  ⚠ {note}")
-    lines.append(f"\nLogged and closed as {inc} (self-resolved). Glad it's sorted!")
+    lines.append(f"\nI've logged and closed it as {inc} (self-resolved). Glad it's sorted!")
     return "\n".join(lines)
 
 
 def _technician(state: dict) -> str:
+    dx = state.get("diagnosis") or {}
     ar = state.get("action_result") or {}
     inc, role, emp = ar.get("incident_id"), ar.get("assignee_role"), ar.get("assignee")
     slot = ar.get("slot") or {}
-    msg = (f"Logged as {inc}. {role} {emp} has been assigned for "
+    root = (dx.get("root_cause") or "").strip()
+    parts = ", ".join(dx.get("parts_needed") or [])
+
+    # (1) answer + (2) reasoning
+    if state.get("verifier_exhausted"):
+        head = ("This one isn't a safe self-fix — I couldn't confirm a reliable fix from "
+                "the manuals, so it needs a technician to assess on site.")
+    else:
+        why = root or "it needs on-site work"
+        tail = f", and a part is needed ({parts})" if parts else ""
+        head = f"No — this isn't one to fix yourself: {why}{tail}, so it needs a technician."
+    # (3) the action that follows from it
+    act = (f"I've logged it as {inc} and assigned {role} {emp} for "
            f"{slot.get('date')} ({slot.get('availability_slot')}); you'll be notified.")
     if ar.get("escalated"):
-        msg += " (Escalated to a supervisor — no technician was free in the window.)"
-    if state.get("verifier_exhausted"):
-        msg += " This is something a technician needs to assess on site."
-    return msg
+        act += " (No technician was free in the window, so it's escalated to a supervisor.)"
+    return head + " " + act
 
 
 def _manage(state: dict) -> str:

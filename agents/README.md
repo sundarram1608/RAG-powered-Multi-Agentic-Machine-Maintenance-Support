@@ -361,8 +361,8 @@ The plumbing every node stands on (no nodes yet):
   | general | **LLM** | `OUTPUT_SYSTEM` (MODE = general) |
   | analytics | **LLM** (exact number quoting) | `OUTPUT_SYSTEM` (MODE = analytics) |
   | refusal | template | `output_node` → relays `guard_reason` |
-  | troubleshoot / self | template | `output_node._self_resolved()` (numbered steps + safety + "logged & closed as inc_X") |
-  | troubleshoot / technician | template | `output_node._technician()` ("logged inc_X; {role} {emp} for {date/slot}…"; notes escalation; verifier-exhaustion adds "a technician needs to assess on site") |
+  | troubleshoot / self | template | `output_node._self_resolved()` — **answers** ("Yes, you can fix this yourself") + **reasoning** (the diagnosis root cause) + numbered steps + safety, then the **action** ("logged & closed as inc_X") |
+  | troubleshoot / technician | template | `output_node._technician()` — **answers** ("No, not a self-fix") + **reasoning** (root cause + any part needed / verifier-exhaustion) + the **action** ("logged inc_X; {role} {emp} for {date/slot}"; notes escalation) |
   | no_assignee | template | `output_node` (inline) |
   | manage_incident | template | `output_node._manage()` |
 
