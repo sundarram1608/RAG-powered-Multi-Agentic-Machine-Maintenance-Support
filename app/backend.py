@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT))                                 # observability
 sys.path.insert(0, str(ROOT / "synthetic_data" / "tables"))   # db_connection
 
 import api  # agents/api.py
+import observability as obs
 
 _loop = None
 _lock = threading.Lock()
@@ -81,6 +82,18 @@ def stream_turn(thread_id, user_id, message):
 
 def stream_resume(thread_id, value, turn_id, user_id):
     yield from _drain(api.stream_resume(thread_id, value, turn_id=turn_id, user_id=user_id))
+
+
+def log_feedback(run_id, score) -> None:
+    """Phase 6c: record a 👍/👎 on a turn's LangSmith run (score 1=up, 0=down). A 👎 is
+    also flagged to the review queue so a human can curate it. Sync (a LangSmith call,
+    not the graph); no-ops when tracing is off. Never raises into the UI."""
+    try:
+        obs.log_feedback(run_id, score)
+        if score == 0:
+            obs.flag_for_review(run_id, "user thumbs-down")
+    except Exception:
+        pass
 
 
 def list_operators():

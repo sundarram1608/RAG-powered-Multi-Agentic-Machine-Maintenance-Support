@@ -63,6 +63,7 @@ def init_session_state() -> None:
     st.session_state.setdefault("thread_id", uuid.uuid4().hex)
     st.session_state.setdefault("pending", None)   # active interrupt: {kind,payload,turn_id,run_id}
     st.session_state.setdefault("user_id", None)
+    st.session_state.setdefault("feedback", {})     # run_id -> submitted score (6c thumbs)
 
 
 def reset_conversation() -> None:
@@ -91,13 +92,27 @@ def render_chat_history() -> None:
                 with st.expander(f"🔎 Activity · {len(steps)} steps", expanded=False):
                     st.markdown("\n".join(f"- {s}" for s in steps))
             st.markdown(m["content"])
+            if m.get("run_id"):
+                _feedback_widget(m["run_id"])
 
 
-def _append(role, content, steps=None) -> None:
+def _append(role, content, steps=None, run_id=None) -> None:
     msg = {"role": role, "content": content}
     if steps:
         msg["steps"] = steps
+    if run_id:              # only answered turns carry a run_id -> feedback thumbs (6c)
+        msg["run_id"] = run_id
     st.session_state.messages.append(msg)
+
+
+def _feedback_widget(run_id: str) -> None:
+    """👍/👎 under an answer → observability.log_feedback (6c). Rated once per run."""
+    sel = st.feedback("thumbs", key=f"fb_{run_id}")   # 0 = 👎, 1 = 👍
+    if sel is not None and st.session_state.feedback.get(run_id) != sel:
+        backend.log_feedback(run_id, sel)
+        st.session_state.feedback[run_id] = sel
+    if run_id in st.session_state.feedback:
+        st.caption("Thanks for the feedback.")
 
 
 def _prompt_text(kind, payload) -> str:
@@ -121,7 +136,8 @@ def _apply(res) -> None:
         _append(ROLE_ASSISTANT, res.get("content") or "⚠️ Something went wrong. Please try again.", steps)
         return
     if res["kind"] == "answer":
-        _append(ROLE_ASSISTANT, res.get("content") or "_(no response)_", steps)
+        _append(ROLE_ASSISTANT, res.get("content") or "_(no response)_", steps,
+                run_id=res.get("run_id"))   # answered turn -> feedback thumbs
         st.session_state.pending = None
     else:
         st.session_state.pending = {"kind": res["kind"], "payload": res.get("payload", {}),

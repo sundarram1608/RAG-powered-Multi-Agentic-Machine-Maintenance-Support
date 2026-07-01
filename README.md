@@ -3,7 +3,7 @@
 A multi-agent AI workflow for **manufacturing equipment troubleshooting, maintenance and service**, built with
 LangGraph (orchestration), RAG over a vector database (knowledge), and MCP (tools/actions).
 
-> Status: ✅ Phases 0–5 complete — 12-agent LangGraph workflow + observability, evaluation & governance (LangSmith). Streamlit UI (Phase 6) next.
+> Status: ✅ Phases 0–6 — a 13-agent LangGraph workflow + observability, evaluation & governance (LangSmith), and a Streamlit app (6a chat/interrupts · 6b live activity feed + streamed answer · 6c 👍/👎 feedback).
 
 ---
 ## Building the Project from Scratch
@@ -260,11 +260,11 @@ Full guides: [`observability/README.md`](observability/README.md) and [`eval/REA
 > limits), so exact *scores* aren't bit-reproducible — the *structure and deterministic
 > results* are.
 
-### 6. Application (Phase 6) — *(coming soon)*
-A **Streamlit UI** for operators/technicians/supervisors. A **skeleton** already exists
-in [`app/`](app/) (`main.py` + `app_utils.py`) — the chat shell is wired, but
-`run_agent()` is a stub; Phase 6 connects it to `agents/api.py`
-(`start_turn`/`resume_turn`, which stream progress and return `run_id` for feedback).
+### 6. Application (Phase 6) — ✅ **6a/6b/6c**
+A **Streamlit UI** for operators ([`app/`](app/)) talking only to `agents/api.py`:
+- **6a** — text chat + sidebar operator login + human-in-the-loop interrupts (clarify / decision / choice / approve).
+- **6b** — a **live activity feed** (per-agent decisions + tool calls, streamed via `astream`) with the answer **typing out** token-by-token; the feed persists as a collapsed expander.
+- **6c** — **👍/👎 feedback** on each answer → `observability.log_feedback(run_id, …)` on that turn's LangSmith run (a 👎 also flags it to the review queue).
 
 ---
 
