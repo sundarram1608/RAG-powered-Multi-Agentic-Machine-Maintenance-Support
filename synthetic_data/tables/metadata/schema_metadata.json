@@ -50,7 +50,7 @@
           "nullable": false,
           "key": "",
           "description": "Email address used for notifications.",
-          "example": "sundarram1997@gmail.com"
+          "example": "operator@example.com"
         },
         {
           "name": "phone",

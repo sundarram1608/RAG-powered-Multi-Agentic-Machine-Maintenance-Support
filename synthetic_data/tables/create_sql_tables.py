@@ -138,10 +138,14 @@ def create_employees(conn) -> None:
         """
     )
 
-    op_email = "sundarram1997@gmail.com"
-    tech_email = "sundarram1997@arizona.edu"
-    sup1_email = "sundarusa1608@gmail.com"
-    sup2_email = "krithikamusic2@gmail.com"
+    # Placeholder recipients (example.com is reserved for docs/examples, never delivers).
+    # To actually receive the send_email demo, point these at real inboxes you control
+    # (locally / in your own fork) — they're kept generic here so the public repo leaks
+    # no real addresses.
+    op_email = "operator@example.com"
+    tech_email = "technician@example.com"
+    sup1_email = "supervisor1@example.com"
+    sup2_email = "supervisor2@example.com"
     phone = "9999999999"
 
     # (employee_id, full_name, role, email, shift_time, status, date_joined)

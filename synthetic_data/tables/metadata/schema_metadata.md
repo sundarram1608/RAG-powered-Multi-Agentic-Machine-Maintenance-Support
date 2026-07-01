@@ -27,7 +27,7 @@ All staff at the plant across three roles — operators (who report incidents vi
 | `employee_id` | varchar(10) | No | PK | Unique staff identifier. | E01 |
 | `full_name` | varchar(80) | No |  | Employee's full name. | Arjun Sharma |
 | `role` | enum('Operator','Technician','Supervisor') | No |  | Job role — operators report faults, technicians resolve them, supervisors oversee/escalate. | Operator |
-| `email` | varchar(120) | No |  | Email address used for notifications. | sundarram1997@gmail.com |
+| `email` | varchar(120) | No |  | Email address used for notifications. | operator@example.com |
 | `phone` | varchar(20) | Yes |  | Contact phone number. | 9999999999 |
 | `shift_time` | enum('7AM-3PM','3PM-11PM','11PM-7AM','9AM-5PM') | Yes |  | Working shift window — supervisors work 9AM-5PM; others rotate across the three 8-hour shifts. | 7AM-3PM |
 | `status` | enum('Active','Inactive') | No |  | Whether the employee is currently active (assignable) or inactive. | Active |

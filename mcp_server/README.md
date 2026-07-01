@@ -303,12 +303,12 @@ FLUSH PRIVILEGES;
 #### One-time setup — the Agentic FDM Services Gmail (free)
 
 `send_email` sends through Gmail SMTP (`smtplib`, free). On the sender account
-(`AGENT_EMAIL`, e.g. `fdm.service.agent@gmail.com`): enable **2-Step
+(`AGENT_EMAIL`, e.g. `your_service_account@gmail.com`): enable **2-Step
 Verification**, then **Google Account → Security → App passwords** to generate a
 16-char password. Put both in `.env`:
 
 ```
-AGENT_EMAIL=fdm.service.agent@gmail.com
+AGENT_EMAIL=your_service_account@gmail.com
 AGENT_EMAIL_APP_PASSWORD=<16-char app password>
 ```
 
