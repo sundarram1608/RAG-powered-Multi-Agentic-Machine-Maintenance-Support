@@ -3,7 +3,7 @@
 The operator-facing chat for the FDM maintenance assistant. It talks **only** to the
 agent boundary (`agents/api.py`) — it never touches the graph, tools, or DB directly.
 
-> Status: **6a ✅** text chat + login + interrupts · **6b ✅** live per-node progress.
+> Status: **6a ✅** text chat + login + interrupts · **6b ✅** live activity feed + streamed answer.
 > **Next:** 6c 👍/👎 feedback. (Image/vision input removed.)
 
 ## Run
@@ -59,7 +59,7 @@ and translate the three modes into events:
   medium)", "⚖️ Verifier → approved (4/5)". These `reason`/`evidence`/`verdict` fields are
   the closest thing the (structured-output) agents have to a visible thought process.
 - **`tool`** (from `custom`) — each tool call a node makes, surfaced via
-  [`agents/streaming.py`](../agents/streaming.py) `emit_tool()`: "🔧 Searching the manual",
+  [`agents/utils/streaming.py`](../agents/utils/streaming.py) `emit_tool()`: "🔧 Searching the manual",
   "🔧 Booking the technician · E13". (LangGraph's built-in streams can't see these — our
   tools are called directly through the MCP client — so nodes emit them explicitly.)
 - **`token`** (from `messages`, Output node only) — the final answer **types out live**;
@@ -93,10 +93,10 @@ Also try **advice** ("what should I do if the bed heats up too rapidly?") → a 
 safety-first answer with no machine asked; and an **ambiguous** one ("the bed is heating
 rapidly") → a `clarify` ask "are you seeing this now, or asking?" — "yes, on M05" hands off
 to troubleshooting, "just asking" answers.
-For **6b**, watch the `st.status` step labels advance during a turn (e.g. analytics:
-"Writing a query…" → "Reviewing the query…" → "Fetching the data…" → "Writing the
-response…"). *(Needs Groq daily budget available — a rate-limited turn streams the
-friendly cap message instead.)*
+For **6b**, watch the live activity log fill in during a turn (e.g. analytics: 🧭 Routing
+→ analytics · 🧮 Wrote a SQL query · 🔎 SQL review → approved · 🔧 Querying the database)
+with the answer then typing out below it. *(Needs Groq daily budget available — a
+rate-limited turn streams the friendly cap message instead.)*
 
 ## What's next
 - **6c** — 👍/👎 feedback → `observability.log_feedback(run_id, …)` (the API already

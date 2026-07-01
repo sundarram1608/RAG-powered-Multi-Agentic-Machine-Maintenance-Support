@@ -24,7 +24,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # agents/ on path
 import config
 import mcp_client
-import streaming
+from utils import streaming
 from llms import get_reasoner
 from schemas import Diagnosis
 from prompts.diagnosis import DIAGNOSIS_SYSTEM, DIAGNOSIS_SYSTEM_VERSION

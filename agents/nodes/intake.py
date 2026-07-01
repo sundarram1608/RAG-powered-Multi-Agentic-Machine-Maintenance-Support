@@ -20,10 +20,10 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # agents/ on path
-import clarify
-import history
+from utils import clarify
+from utils import history
 import mcp_client
-import streaming
+from utils import streaming
 from llms import get_reasoner
 from schemas import Intake
 from prompts.intake import INTAKE_SYSTEM, INTAKE_SYSTEM_VERSION

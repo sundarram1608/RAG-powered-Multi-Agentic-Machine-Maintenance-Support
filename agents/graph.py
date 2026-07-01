@@ -23,7 +23,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # agents/ on path
-import clarify
+from utils import clarify
 import config
 from state import State
 

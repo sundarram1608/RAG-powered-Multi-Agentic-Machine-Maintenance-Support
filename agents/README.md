@@ -73,7 +73,7 @@ boundary in [`api.py`](api.py):
 ```
 start_turn(thread_id, user_id, message) -> Result   # Result carries kind/content/turn_id/run_id
 resume_turn(thread_id, value)           -> Result   # answer a clarification / approve an action
-stream_turn(...) / stream_resume(...)   -> async-gen of {type:"progress",node} … {type:"result",**Result}
+stream_turn(...) / stream_resume(...)   -> async-gen of {type:"decision"|"tool"|"token"} … {type:"result",**Result}
 ```
 The `stream_*` variants (Phase 6b) run `astream(stream_mode=["updates","messages","custom"])`
 and emit a live activity feed — `decision` lines (per-agent summaries from `updates`),
@@ -192,9 +192,9 @@ The plumbing every node stands on (no nodes yet):
 | [`schemas.py`](schemas.py) | Pydantic structured outputs (`GuardResult`, `Route`, `Intake`, `Diagnosis`, `Verdict`, `Decision`, `SqlPlan`, `SqlReview`, `ManagePlan`) |
 | [`llms.py`](llms.py) | `get_reasoner()` (Groq) · `get_judge()` (Gemini) — provider factory |
 | [`mcp_client.py`](mcp_client.py) | connect to both MCP servers; `get_all_tools()` + `tools_for(agent)` |
-| [`history.py`](history.py) | `format_recent(messages, n)` — recent-exchanges window for follow-up context |
-| [`clarify.py`](clarify.py) | clarify-interrupt UX helpers: `guide()`/`give_up()` (how-to-find-it text when a user is stuck) + `is_bail()`/`bailed()` (cheap fast-path to stop on obvious "ok"/"cancel"). Intent itself (stuck / which-incident / which-tech / note) is LLM-judged at the agents. |
-| [`streaming.py`](streaming.py) | `emit()`/`emit_tool()` — nodes surface tool calls / sub-steps onto the `astream(stream_mode="custom")` feed (no-op outside a streamed run) for the app's 6b live activity log |
+| [`utils/history.py`](utils/history.py) | `format_recent(messages, n)` — recent-exchanges window for follow-up context |
+| [`utils/clarify.py`](utils/clarify.py) | clarify-interrupt UX helpers: `guide()`/`give_up()` (how-to-find-it text when a user is stuck) + `is_bail()`/`bailed()` (cheap fast-path to stop on obvious "ok"/"cancel"). Intent itself (stuck / which-incident / which-tech / note) is LLM-judged at the agents. |
+| [`utils/streaming.py`](utils/streaming.py) | `emit()`/`emit_tool()` — nodes surface tool calls / sub-steps onto the `astream(stream_mode="custom")` feed (no-op outside a streamed run) for the app's 6b live activity log |
 
 **Milestone test** (`python agents/mcp_client.py`, under a clearly-marked
 `MILESTONE TEST` header):

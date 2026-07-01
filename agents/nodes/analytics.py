@@ -22,10 +22,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # agents/ on path
 import config
 import mcp_client
-import streaming
+from utils import streaming
 from llms import get_reasoner
 from schemas import SqlPlan
-from history import format_recent
+from utils.history import format_recent
 from prompts.analytics import ANALYTICS_CODER_SYSTEM, ANALYTICS_CODER_VERSION
 from db_schema import get_schema_context
 

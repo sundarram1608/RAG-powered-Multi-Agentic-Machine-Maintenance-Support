@@ -15,7 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # agents/ on path
 from llms import get_reasoner
 from schemas import GuardResult
-from history import format_recent
+from utils.history import format_recent
 from prompts.input import INPUT_SYSTEM, INPUT_SYSTEM_VERSION
 
 from langchain_core.messages import HumanMessage, SystemMessage

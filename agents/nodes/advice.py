@@ -17,9 +17,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # agents/ on path
-import history
+from utils import history
 import mcp_client
-import streaming
+from utils import streaming
 from llms import get_reasoner
 from schemas import AdvicePlan
 from prompts.advice import ADVICE_TRIAGE_SYSTEM, ADVICE_TRIAGE_VERSION

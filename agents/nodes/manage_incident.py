@@ -28,11 +28,11 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # agents/ on path
-import clarify
+from utils import clarify
 import config
-import history
+from utils import history
 import mcp_client
-import streaming
+from utils import streaming
 from llms import get_reasoner
 from schemas import ClarifyReply, ManagePlan, NoteReply, TechPick
 from prompts.clarify_interp import CLARIFY_INTERP_SYSTEM, NOTE_REPLY_SYSTEM, TECH_PICK_SYSTEM
