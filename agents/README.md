@@ -235,7 +235,7 @@ The plumbing every node stands on (no nodes yet):
 - **Output format** (Pydantic `Route` via `with_structured_output`) → writes state: `intent` (`"troubleshoot" | "advice" | "analytics" | "manage_incident" | "general"`), `prompt_versions["supervisor"]`.
 - **Routing:** `troubleshoot` → **Intake** · `advice` → **Advice** · `analytics` → **Analytics** · `manage_incident` → **Manage Incident** · `general` → **Output**.
 - **Edge cases:** a CURRENT fault → `troubleshoot`; a general/preventive/how-to or hypothetical question → `advice`; **unsure current-fault vs asking → `advice`** (it confirms with the user rather than demanding a machine); READ data question → `analytics`; WRITE/action on a known record → `manage_incident`; capability/greeting/farewell → `general`; a brief follow-up routes to its referent's path (e.g. after listing incidents, "which are mine?" → `analytics`).
-- **Prompt:** `prompts/supervisor.py` · v1.3.0 (adds the `advice` route; ambiguous fault-vs-advice → advice; context-aware follow-ups).
+- **Prompt:** `prompts/supervisor.py` · v1.4.0 (adds the advice route; ambiguous fault→advice; a bare acknowledgement→general, not accepting a diagnose offer).
 
 ### 3. Advice Agent — `nodes/advice.py`  ✅
 - **Purpose:** answer general / preventive / how-to / hypothetical FDM questions ("what to do if the bed heats rapidly?", "how do I prevent clogs?") that are NOT a current fault — with **no machine and no incident**. A first-class agent (own node + prompt + structured output), a peer of Analytics.

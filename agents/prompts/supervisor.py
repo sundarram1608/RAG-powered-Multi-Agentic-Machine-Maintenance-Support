@@ -11,9 +11,11 @@ Changelog:
   v1.3.0 — added the "advice" route (general/preventive/how-to questions); a fault
            mentioned without a clear "facing it now" framing goes to advice, which
            confirms with the user.
+  v1.4.0 — a bare acknowledgement/pleasantry ("ok", "cool", "thanks") is "general" — it
+           acknowledges the prior reply; do NOT read it as accepting an offer to diagnose.
 """
 
-SUPERVISOR_SYSTEM_VERSION = "1.3.0"
+SUPERVISOR_SYSTEM_VERSION = "1.4.0"
 
 SUPERVISOR_SYSTEM = """You are the Supervisor (router) for "Agentic FDM Services", an AI assistant for a
 3D-printing (FDM) plant. The message has already passed a scope + safety guard, so
@@ -65,6 +67,11 @@ Tie-breakers:
 - A READ question about data -> "analytics"; a WRITE/action on a KNOWN, existing
   incident -> "manage_incident".
 - A capability / greeting / farewell / meta question -> "general".
+- A bare ACKNOWLEDGEMENT or pleasantry ("ok", "cool", "thanks", "nice", "great", "got
+  it", "perfect") -> "general". It just acknowledges the previous reply. Even if the
+  assistant had offered to diagnose/troubleshoot, an acknowledgement is NOT accepting
+  that offer — only route to "troubleshoot" if the user states an actual fault or
+  explicitly asks to diagnose one.
 - If uncertain between troubleshoot and advice, prefer "advice" (it confirms with the
   user before demanding a machine). For other genuinely-uncertain actionable cases,
   prefer "troubleshoot" — its intake step clarifies the details.
