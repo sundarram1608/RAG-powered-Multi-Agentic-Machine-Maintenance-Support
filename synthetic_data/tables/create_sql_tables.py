@@ -14,6 +14,8 @@ Design choices:
   inside the orchestrator when more tables are added.)
 """
 
+import os
+
 
 def build_sql_tables(conn) -> None:
     """Create all static reference tables, in FK dependency order.
@@ -138,14 +140,15 @@ def create_employees(conn) -> None:
         """
     )
 
-    # Placeholder recipients (example.com is reserved for docs/examples, never delivers).
-    # To actually receive the send_email demo, point these at real inboxes you control
-    # (locally / in your own fork) — they're kept generic here so the public repo leaks
-    # no real addresses.
-    op_email = "operator@example.com"
-    tech_email = "technician@example.com"
-    sup1_email = "supervisor1@example.com"
-    sup2_email = "supervisor2@example.com"
+    # Notification recipients — read from .env (loaded by get_connection, which always
+    # runs before this), defaulting to example.com so the PUBLIC repo leaks no real
+    # address. To actually receive the send_email demo, set real inboxes you control in
+    # your git-ignored .env (SEED_OPERATOR_EMAIL / SEED_TECHNICIAN_EMAIL /
+    # SEED_SUPERVISOR1_EMAIL / SEED_SUPERVISOR2_EMAIL); example.com never delivers.
+    op_email = os.getenv("SEED_OPERATOR_EMAIL", "operator@example.com")
+    tech_email = os.getenv("SEED_TECHNICIAN_EMAIL", "technician@example.com")
+    sup1_email = os.getenv("SEED_SUPERVISOR1_EMAIL", "supervisor1@example.com")
+    sup2_email = os.getenv("SEED_SUPERVISOR2_EMAIL", "supervisor2@example.com")
     phone = "9999999999"
 
     # (employee_id, full_name, role, email, shift_time, status, date_joined)
