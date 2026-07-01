@@ -46,18 +46,10 @@ def _llm(mode: str, body: str) -> str:
 # Templated resolution replies. Each: (1) ANSWERS "can I fix it myself?", (2) gives the
 # REASONING (the verified diagnosis' root cause), then (3) ties that to the ACTION taken.
 def _self_resolved(state: dict) -> str:
-    dx = state.get("diagnosis", {})
+    # The fix steps + reasoning were already shown in the self-fix guidance
+    # (self_action_message) — so this is just the closing CONFIRMATION, not a repeat.
     inc = (state.get("action_result") or {}).get("incident_id")
-    root = (dx.get("root_cause") or "").strip()
-    head = "Yes — you can safely fix this one yourself."
-    if root:
-        head += f" The likely cause is {root}."
-    lines = [head, "Here's how:"]
-    lines += [f"  {i}. {s}" for i, s in enumerate(dx.get("fix_steps") or [], 1)]
-    for note in dx.get("safety_notes") or []:
-        lines.append(f"  ⚠ {note}")
-    lines.append(f"\nI've logged and closed it as {inc} (self-resolved). Glad it's sorted!")
-    return "\n".join(lines)
+    return f"Done — glad that sorted it! I've logged and closed it as {inc} (self-resolved)."
 
 
 def _technician(state: dict) -> str:

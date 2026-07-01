@@ -36,7 +36,7 @@ def user_manual_retrieval(query: str, mvc_code: str, k: int = 5) -> list:
     chunks = _retrieve_manual(query, mvc_code, k=k)
     return [
         {
-            "text": c["text"],
+            "text": _common.clean_chunk_text(c["text"]),
             "source_file": c["metadata"].get("source_file"),
             "page_start": c["metadata"].get("page_start"),
             "page_end": c["metadata"].get("page_end"),

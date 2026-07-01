@@ -36,7 +36,7 @@ def safety_retrieval(query: str, k: int = 2) -> list:
     chunks = _retrieve_safety(query, k=k)
     return [
         {
-            "text": c["text"],
+            "text": _common.clean_chunk_text(c["text"]),
             "source_file": c["metadata"].get("source_file"),
             "page_start": c["metadata"].get("page_start"),
             "page_end": c["metadata"].get("page_end"),

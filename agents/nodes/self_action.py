@@ -18,12 +18,33 @@ Input  (reads state): diagnosis, machine_id, symptom, current_user_id,
 Output (writes state): action_result.
 """
 
+import re
 import sys
+import unicodedata
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # agents/ on path
 import mcp_client
 from utils import streaming
+
+# Soften a raw source citation for the operator: "[niosh_safe_..._2024-103.pdf p29-29]"
+# -> "(safety guide, p29)"; a manual file -> "(user manual, pX)".
+_CITATION_RE = re.compile(r"\[\s*([\w./\- ]+?)\.pdf\s+p(\d+)(?:-\d+)?\s*\]", re.I)
+
+
+def _clean_note(note: str) -> str:
+    """Operator-friendly safety note: soften the source citation and drop any stray
+    PDF-extraction glyphs (belt-and-suspenders; retrieval also sanitizes now)."""
+    if not note:
+        return note
+    def _src(m):
+        source = "user manual" if "manual" in m.group(1).lower() else "safety guide"
+        return f"({source}, p{m.group(2)})"
+    s = _CITATION_RE.sub(_src, note)
+    s = "".join(" " if (c not in "\n\t" and
+                        (c == "�" or unicodedata.category(c) in ("Co", "Cc", "Cn")))
+                else c for c in s)
+    return re.sub(r"[ \t]{2,}", " ", s).strip()
 
 
 async def _call(name: str, args: dict):
@@ -43,10 +64,10 @@ def self_action_message(diagnosis: dict) -> str:
     head = "This looks like something you can fix yourself"
     head += f" — the likely cause is {root}." if root else "."
     lines = [head, "Here's how:"]
-    lines += [f"  {i}. {step}" for i, step in enumerate(steps, 1)]
+    lines += [f"  {i}. {_clean_note(step)}" for i, step in enumerate(steps, 1)]
     if safety:
         lines.append("\nSafety precautions:")
-        lines += [f"  - {note}" for note in safety]
+        lines += [f"  - {_clean_note(note)}" for note in safety]
     # explain each option, so the choice carries its reasoning (not just labels)
     lines.append("\nOnce you've done this, choose **Complete & close service request** to "
                  "close it out — or, if it didn't resolve the issue or you'd rather a "

@@ -36,6 +36,26 @@ from db_connection import get_connection  # noqa: E402  (import after sys.path s
 REFERENCE_TODAY = date(2026, 6, 16)
 
 
+import re as _re
+import unicodedata as _ud
+
+
+def clean_chunk_text(text: str) -> str:
+    """Normalize PDF-extraction artifacts in a retrieved chunk: drop replacement
+    chars, private-use glyphs (e.g. bullet symbols that render as boxes), and other
+    control chars; collapse runs of spaces. Keeps normal text/newlines intact."""
+    if not text:
+        return text
+    out = []
+    for ch in text:
+        if ch in ("\n", "\t", " "):
+            out.append(ch)
+            continue
+        cat = _ud.category(ch)                       # Co=private-use, Cc=control, Cn=unassigned
+        out.append(" " if (ch == "�" or cat in ("Co", "Cc", "Cn")) else ch)
+    return _re.sub(r"[ \t]{2,}", " ", "".join(out)).strip()
+
+
 def run_query(sql: str, params: tuple = ()) -> list:
     """Run a parameterized read query; return rows as a list of dicts."""
     conn = get_connection()
