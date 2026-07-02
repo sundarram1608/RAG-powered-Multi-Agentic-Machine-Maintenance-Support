@@ -6,7 +6,7 @@ schema (information_schema) and ENRICHING it with hand-authored prose from
 table_descriptions.py. Writes two artifacts:
 
     schema_metadata.json   -> for agents (machine-readable)
-    schema_metadata.md     -> for humans (readable data dictionary)
+    schema_metadata.md     -> for developers (human-readable data dictionary)
 
 Why introspect: column names/types/nullability/keys + sample values come from
 the real DB every run, so the structure can never drift. Only the prose in

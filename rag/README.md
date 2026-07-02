@@ -1,9 +1,7 @@
-# RAG pipeline — Maintenance Service Assistant
+# RAG pipeline
 
-The RAG (Retrieval-Augmented Generation) pipeline gives the **Diagnosis agent its
-knowledge** — the troubleshooting, operation, maintenance, and safety content in
-the LulzBot manuals + the NIOSH safety guide. Structured facts come from MySQL
-(via tools); narrative know-how comes from here.
+The RAG (Retrieval-Augmented Generation) pipeline gives the Agentic workflow its
+knowledge** (to diagnosis agent) that includes troubleshooting, operation, maintenance, and safety content in the LulzBot manuals + the NIOSH safety guide. Structured facts come from MySQL(via tools); narrative know-how comes from here.
 
 ## Two phases
 
@@ -20,11 +18,9 @@ space. Retrieval adds a **cross-encoder reranker** (`bge-reranker-v2-m3`) on top
 > reorders the candidates — it does **not** touch the stored embeddings, the
 > ingestion pipeline, or the index, so it needs no re-ingestion and can be tuned
 > or removed freely. Systematic RAG **evaluation** (context precision/recall,
-> faithfulness) was added in **Phase 5** with LangSmith (see [`eval/`](../eval/)),
-> which validates/tunes the reranker (candidate count, `max_length`) — or disables
-> it if it doesn't help.
+> faithfulness)are performed in **Phase 5** using both Golden dataset and with LangSmith (see [`eval/`](../eval/)), which validates/tunes the reranker (candidate count, `max_length`) — or disables it if it doesn't help.
 
-## Directory
+## Directory Structure
 
 ```
 rag/
@@ -49,20 +45,15 @@ rag/
 `{"text": ..., "metadata": {**base_metadata, "source_file", "page_number"}}`.
 
 - **Why PyMuPDF:** fast, accurate text extraction with correct reading order,
-page-level access, single lightweight dependency; already proven on these exact
-manuals. (pdfplumber is stronger for tables — which we don't have; pypdf is
-lighter but lower-quality text.)
+page-level access, single lightweight dependency. (pdfplumber is stronger for tables — which we don't have; pypdf is lighter but lower-quality text.)
 - **Why page-by-page:** preserves an exact `page_number` per record, used for
 citations and for the chunker's page-range tracking. Cross-page topics aren't
 lost — the chunker stitches across pages and top-k retrieval pulls adjacent
 chunks together.
 - **Why text-only:** the embedding model is text-based, so images aren't embedded.
-Manual diagrams are out of scope here (multimodal RAG is a future enhancement;
-separate from the user-photo vision agent).
+Manual diagrams are out of scope here (multimodal RAG is thought as a future enhancement).
 
-The loader returns **plain dicts** (no LangChain dependency at this step);
-conversion to LangChain `Document`s happens at the chunking step.
-
+The loader returns **plain dicts**;
 #### Run the Step 1 self-test
 
 ```bash
@@ -117,8 +108,7 @@ chunker (Step 4), the embedder (Step 5), and retrieval.
 - **Normalized embeddings:** bge-m3 retrieval works best with normalized vectors, so
   cosine is the natural similarity (we set Chroma to cosine in Step 6).
 
-> **Deployment note:** running bge-m3 in-process needs real RAM/GPU (fine on a Mac or
-> an AWS instance you size yourself), but **not** any
+> **Deployment note:** running bge-m3 in-process needs real RAM/GPU, but **not** any
 > free tier. The loader is the single seam — to deploy on a constrained host, swap it
 > for a hosted embedding API or a small local model and **re-ingest** (query and
 > ingestion must use the same model).

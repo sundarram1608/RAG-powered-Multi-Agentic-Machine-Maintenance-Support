@@ -12,9 +12,10 @@ maintenance_history, incidents).
 
 ## 1. Prerequisites
 
-- macOS (these steps assume macOS; notes for the official installer are included)
 - Admin rights to install software
 - A terminal (zsh)
+
+Note: These steps assume macOS.
 
 Check whether MySQL is already installed:
 
@@ -195,7 +196,7 @@ mysql -u root -p -e "USE maintenance; SHOW TABLES;"
 ## 10. Metadata / data dictionary
 
 `metadata/schema_metadata.json` (for agents) and `metadata/schema_metadata.md`
-(for humans) are **generated from the live database** by
+(for developers) are **generated from the live database** by
 `metadata/generate_metadata.py` (structure is introspected from
 `information_schema`; only the prose lives in `metadata/table_descriptions.py`).
 
