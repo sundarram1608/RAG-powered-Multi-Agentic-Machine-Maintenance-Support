@@ -1,23 +1,29 @@
-# Agentic RAG + MCP — FDM Service Assistant
+# AI Assistant for ShopFloor FDM Services
 
-A multi-agent AI workflow for **manufacturing equipment troubleshooting, maintenance and service**, built with
-LangGraph (orchestration), RAG over a vector database (knowledge), and MCP (tools/actions).
+## Agentic RAG + MCP
 
-> Status: ✅ Phases 0–6 — a 13-agent LangGraph workflow + observability, evaluation & governance (LangSmith), and a Streamlit app (6a chat/interrupts · 6b live activity feed + streamed answer · 6c 👍/👎 feedback).
+A multi-agent AI workflow for **manufacturing equipment troubleshooting, maintenance, , incident management and service workflows**, built with LangGraph (orchestration), RAG over a vector database (knowledge) and MYSQL database, and MCP (tools/actions).
+
+> Includes: ✅ a multi-agent LangGraph workflow + observability, evaluation & governance (LangSmith), and a User interface using streamlit (chat/interrupts · live activity feed + streamed answer · 👍/👎 feedback).
 
 ---
-## Building the Project from Scratch
 
-### 0. Prerequisites:  
+## Build the Project from Scratch
+
+### 0. Prerequisites:
+
 > - **Python 3.11** (this project was created with Python 3.11.6)
 > - a local **MySQL Community Server**
 > - macOS / Linux / Windows with the `venv` module (bundled with Python)
 
-Run all commands from the project root.
+**Run all commands from the project root.**
 
---- 
+---
+
+
 
 ### 1. Environment — virtual environment + dependencies
+
 **Check your Python version:**
 
 ```bash
@@ -26,7 +32,7 @@ python3 --version   # expect Python 3.11.x
 
 **Create the virtual environment**
 
-The environment is named **`preventivemaintenance3.11`** (the `3.11` reflects the Python version).
+The environment is named `preventivemaintenance3.11` (the `3.11` reflects the Python version).
 
 ```bash
 # from the project root: .../agentic_ai_projects/agenticragmcp
@@ -62,6 +68,7 @@ deactivate
 ```
 
 **Consolidated list of codes for environment setup** 
+
 ```bash
 python3 --version
 python3 -m venv preventivemaintenance3.11
@@ -71,71 +78,65 @@ cp .env.example .env      # then fill in your MySQL creds + free API keys
 deactivate
 ```
 
-> **Secrets:** `.env` holds real credentials and is **git-ignored** — only
-> `.env.example` (the template) is committed. Copy it to `.env` and fill in values
-> **before** the DB/seed steps below (the very first script, `generate_data.py`,
-> reads `DB_*` from `.env`). The DB-user step in §3 later writes the generated
-> `maint_readonly`/`maint_write` creds back into `.env`.
+> **Secrets:** 
+> `.env` holds real credentials and is **git-ignored**.
+> `.env.example` (the template) is shared in this repo. Copy it to `.env` and fill in values **before** the DB/seed steps below (the very first script, `generate_data.py`, reads `DB_`* from `.env`). 
+> The DB-user step in §3 later writes the generated `maint_readonly`/`maint_write` creds back into `.env`.
 
 ---
+
+
 
 ### 2. Knowledge Base
 
 The **Knowledge Base** has two layers and both feed the context to the LLM agents: 
+
 - **Database** (structured facts/ SQL Tables) 
 - **RAG** (user manuals & Safety documents/ Vector store).
 
 > **2a. Database layer** — MySQL tables + seed data + schema metadata.
-> The database layer is built with well though out tables that provide the structured knowledge base to the agentic LLMs. This layer is hosted in MySQL server.
-> It's dual-purpose — a knowledge source *and* the operational system of record. Agent tools **read** facts from it **and write** to it at runtime (logging incidents, booking technician slots, recording incident outcomes). Only the `incidents` and `technician_schedule` tables are ever written; all other tables are read-only.
->  - Full guide → [`synthetic_data/README.md`](synthetic_data/README.md)
->  - (MySQL install/setup → [`synthetic_data/tables/readme_database_creation.md`](synthetic_data/tables/readme_database_creation.md))
+> The database layer is built with real manufacturing industry-like tables that provide the structured knowledge base to the agentic LLMs. This layer is hosted in MySQL server.
+> It's dual-purpose — a knowledge source and the operational system of record. Agent tools **read** facts from it **and write** to it at runtime (logging incidents, booking technician slots, recording incident outcomes). Only the `incidents` and `technician_schedule` tables are ever written; all other tables are read-only for the agents.
 >
-> **First** install MySQL and create the empty `maintenance` schema (see the setup
-> guide above), and make sure `.env` has your `DB_*` creds — `generate_data.py`
-> connects to that database and builds the tables inside it; it does **not**
-> `CREATE DATABASE` for you.
-
-  ```bash
-  python synthetic_data/tables/generate_data.py
-  ```
-<br>
+> - Full database details → `[synthetic_data/README.md](synthetic_data/README.md)`
+> - (MySQL install/setup → `[synthetic_data/tables/readme_database_creation.md](synthetic_data/tables/readme_database_creation.md)`)
+>
+> **First** install MySQL and create the empty `maintenance` schema (see the setup guide above), and make sure `.env` has your `DB_`* creds — `generate_data.py` connects to that database and builds the tables inside it; it does **not** `CREATE DATABASE` for you.
 
 > **2b. RAG layer** — vector index built from the source PDFs.
-> The RAG knowledge base is built from publicly available, legally reusable documents in
-> [`synthetic_data/documents/`](synthetic_data/documents/):
+> The RAG knowledge base is built from publicly available, legally reusable documents in `[synthetic_data/documents/](synthetic_data/documents/)`:
+>
 > - **User manuals (FDM)** — LulzBot Mini, TAZ 6, TAZ Workhorse, TAZ Pro (CC BY-SA 4.0)
 > - **Safety guidelines** — NIOSH *Approaches to Safe 3D Printing* (public domain)
-> See [`synthetic_data/documents/ATTRIBUTIONS.md`](synthetic_data/documents/ATTRIBUTIONS.md) for full source URLs and license terms.
+> Refer to `[synthetic_data/documents/ATTRIBUTIONS.md](synthetic_data/documents/ATTRIBUTIONS.md)` for full source URLs and license terms.
 > RAG is **read-only** knowledge (the manuals).
 > The source PDFs are not committed to version control (see `.gitignore`).
->  - Full guide to build the RAG layer → [`rag/README.md`](rag/README.md)
-  
-  ```bash
-  python rag/orchestrator.py
-  ```
-  <br>
-  
+> - Full guide to build the RAG layer → `[rag/README.md](rag/README.md)`
+
 **Note on the Database layers:**  Both the layers are consulted for knowledge but, only the DB is mutated at runtime. 
 
 ---
 
+
+
 ### 3. MCP tool layer
 
-The **tools** are the only way the agents act on the Knowledge Base. Each tool is a plain Python function in `mcp_server/mcp_tools/`;
+The **tools** are the only way the agents act on the Knowledge Base. Each tool is a plain Python function in `mcp_server/mcp_tools/`; 
 `mcp_server/server.py` registers them with **FastMCP**, which turns each function's name + docstring + type hints into the schema the LLM sees.
 
 **16 tools, in four groups:**
+
 - **read (9)** — `get_machine`, `get_overdue_status`, `get_maintenance_history`, `get_incident_history`, `get_incident`, `list_incidents`, `check_inventory`, `find_available_technician`, `list_available_technicians` (DB reads).
 - **rag (2)** — `user_manual_retrieval`, `safety_retrieval` (thin wrappers over `rag/retriever.py`).
 - **write (3)** — `create_incident`, `book_technician_slot`, `update_incident` (scoped writes to `incidents` / `technician_schedule` only).
 - **other (2)** — `run_readonly_query` (LLM-generated read-only SQL), `send_email` (notifications from "Agentic FDM Services").
 
 **Two MCP transports** (both operational — see `mcp_server/README.md`):
+
 - **stdio** (default) serves the 14 local-data tools (read + rag + write); the agent auto-spawns it.
 - **streamable-HTTP** (`127.0.0.1:8000`) serves the 2 "service" tools (`run_readonly_query`, `send_email`) as a separate process.
 
-**Safety & PII**: three MySQL identities — admin, `maint_readonly` (SELECT only, for generated SQL), and `maint_write` (INSERT/UPDATE on the two
+**Safety & PII**: three MySQL identities — `admin`, `maint_readonly` (SELECT only, for generated SQL), and `maint_write` (INSERT/UPDATE on the two
 mutable tables only, no DELETE/DDL/master data). Generated SQL is validated (read-only, single statement, no `phone`); writes go only through the scoped tools; `phone` never enter the agent's context.
 
 ```bash
@@ -149,16 +150,18 @@ python mcp_server/server.py http        # -> http://127.0.0.1:8000/mcp
 # smoke test — list the tools each transport exposes
 python mcp_server/server.py --selftest  # expect 14 stdio + 2 http tools
 ```
-For live `send_email`, also set `AGENT_EMAIL` + `AGENT_EMAIL_APP_PASSWORD` in `.env`.
-Full guide → [`mcp_server/README.md`](mcp_server/README.md)
+
+For live `send_email`, set all the necessary email and passwords including `AGENT_EMAIL` + `AGENT_EMAIL_APP_PASSWORD` in `.env`.
+Full guide → `[mcp_server/README.md](mcp_server/README.md)`
 
 ---
 
+
+
 ### 4. Agent layer — LangGraph workflow
 
-**13 specialized agents** are wired into one **LangGraph `StateGraph`** (15 nodes),
-compiled with a `MemorySaver` checkpointer. The Input guard screens every turn; the
-**Supervisor** routes to one of five sub-flows:
+**13 specialized agents** are wired into one **LangGraph** `StateGraph` (15 nodes),
+compiled with a `MemorySaver` checkpointer. Whenever a user asks something to the AI Assistant, the Input guard screens every turn; the **Supervisor** routes to one of five sub-flows:
 
 - **troubleshoot** — Intake (resolve machine + symptom) → Diagnosis (RAG manual/safety + DB facts, corrective-RAG) → Verifier (independent RAG-triad + safety judge) → the `needs_technician` gate → **Self Action** (operator self-fix) / **Technician Action** (book + notify) / Decider.
 - **advice** — the **Advice** agent answers general/preventive/how-to questions ("what to do if the bed heats rapidly?") grounded in the safety guide, no machine or incident. If it's unclear whether the user is facing the fault now or just asking, it asks — and if they *are* facing it, it hands off to troubleshoot.
@@ -171,10 +174,15 @@ fact-bearing replies from templates (no hallucinated ids/counts) and a final PII
 scrub. **Human-in-the-loop** pauses (clarifications, the self/technician decision,
 the two-button self-fix, manage approval) use LangGraph `interrupt()` / resume.
 
-**Models (all free-tier):** Groq **Llama 3.3 70B** (reasoning / tool-calling),
-**Gemini 2.5 Flash-Lite** (independent judge) with a **Qwen-3 32B on Groq** fallback
-when Gemini is unavailable, **BGE-M3** (local embeddings) + reranker. Both LLMs use
-retry/backoff. Needs `GROQ_API_KEY` + `GOOGLE_API_KEY` in `.env`.
+**Models (all free-tier):** 
+
+- Groq **Llama 3.3 70B** (reasoning / tool-calling),
+- **Gemini 2.5 Flash-Lite** (independent judge) with a **Qwen-3 32B on Groq** fallback
+when Gemini is unavailable, 
+- **BGE-M3** (local embeddings) + reranker.
+
+Both LLMs use retry/backoff. 
+Needs `GROQ_API_KEY` + `GOOGLE_API_KEY` in `.env`.
 
 ```bash
 # start the HTTP services server first (separate terminal)
@@ -187,61 +195,62 @@ python agents/run.py
 python agents/test_e2e.py
 python agents/test_routing.py
 ```
-This layer was built in three sub-phases: **4a** foundations (`config`, `llms`,
-`state`, `schemas`, `mcp_client`) → **4b** the 13 agents (each standalone-tested) →
-**4c** graph assembly (wiring, conditional edges, interrupt wrappers).
-Full guide (topology, every edge, interrupts, turn/memory model, the 4a/4b/4c
-breakdown) → [`agents/README.md`](agents/README.md)
 
-### 5. Observability, Evaluation & Governance (Phase 5)
+This layer was built in three sub-phases: 
+
+- **4a** foundations (`config`, `llms`, `state`, `schemas`, `mcp_client`)
+- **4b** the 13 agents (each standalone-tested)
+- **4c** graph assembly (wiring, conditional edges, interrupt wrappers).
+
+> Full guide (topology, every edge, interrupts, turn/memory model, the 4a/4b/4c breakdown) → `[agents/README.md](agents/README.md)`
+
+---
+
+
+
+### 5. Observability, Evaluation & Governance
 
 **Purpose:** make the workflow **observable, measurably correct, and governed** — all
-**backstage**: none of this changes the live agent's behaviour. Three pillars:
+**backstage**: none of this changes the live agent's behaviour. 
 
-**A. Observability — [`observability/`](observability/) (5a).** Every turn is traced to
-LangSmith (run tree, latency, tokens, cost), grouped by conversation/turn, with **PII
-masked** before upload.
+**A. Observability** `[observability/](observability/)` **(5a).** 
+Every turn is traced to LangSmith (run tree, latency, tokens, cost), grouped by conversation/turn, with **PII masked** before upload.
 
-**B. Evaluation — [`eval/`](eval/) (5b → 5d).** Golden datasets (5b) → evaluators +
-`run_eval` + an **Excel scorecard** + LangSmith Experiments (5c) → **tuning** sweeps for
-the reranker/verifier/diagnosis dials (5d). Grades RAG groundedness, retrieval, routing,
-SQL, safety red-team, and incident management. The eval **judge** runs on OpenRouter
-(separate quota; the live agent never calls it).
+**B. Evaluation —** `[eval/](eval/)` **(5b → 5d).** 
 
-**C. Governance — [`eval/versioning_and_ci/`](eval/versioning_and_ci/) + [`observability/governance.py`](observability/governance.py) (5e → 5f).**
-Version-stamp every experiment + a **regression gate** that fails CI on a quality drop
-(5e); **human feedback capture** + a **review queue** that routes risky runs
-(low-confidence / escalations / DB writes) to a human (5f). PII masking is also a
-governance control.
+- Golden datasets (5b) → evaluators + `run_eval` + an **Excel scorecard** + LangSmith Experiments 
+- (5c) → **tuning** sweeps for the reranker/verifier/diagnosis dials 
+- (5d) Grades RAG groundedness, retrieval, routing, SQL, safety red-team, and incident management. The eval **judge** runs on OpenRouter (separate quota; the live agent never calls it).
 
-> **Grouping notes (as asked):** **Versioning + CI** sits under **Governance** (it's a
-> change/process control, though it consumes Evaluation outputs). **Safety** is
-> *cross-cutting*, not a standalone phase — its *evaluation* (input-guard red-team +
-> PII-leak checks) lives under **Evaluation** (`safety_redteam`); its *enforcement* (PII
-> masking, the input guard) lives under **Governance/Observability**.
+**C. Governance —** `[eval/versioning_and_ci/](eval/versioning_and_ci/)` **+** `[observability/governance.py](observability/governance.py)` **(5e → 5f).**
 
-**Evaluations carried out — what, where to see them, and what they validate.** Each
-dataset is graded into a **LangSmith Experiment** (per-example drill-down) and a sheet
-in `eval/results/eval_<ts>.xlsx`; tuning sweeps write to `eval/results/tuning/`.
+- (5e) Version-stamp every experiment + a **regression gate** that fails CI on a quality drop 
+- **human feedback capture** + a **review queue** that routes risky runs (low-confidence / escalations / DB writes) to a human 
+- (5f). PII masking is also a governance control.
 
-| Evaluation | What it measures | Where to see the result | What it validates in the workflow |
-|---|---|---|---|
-| **Troubleshoot** (faithfulness*, answer-relevance*, needs-technician gate) | diagnosis grounded in retrieved context, answers the symptom, correct self-vs-technician gate | LangSmith `fdm-troubleshoot` + Excel `troubleshoot_cases` | Diagnosis → Verifier → `needs_technician` gate |
-| **Retrieval** (precision@k, recall@k, MRR, nDCG) | retriever surfaces the right manual pages | LangSmith `fdm-retrieval` + Excel `retrieval_labels` | RAG retriever (`rag/retriever.py`) feeding Diagnosis |
-| **Text-to-SQL** (rows-match, read-only, no-phone) | analytics SQL is correct, read-only, never touches `phone` | LangSmith `fdm-sql` + Excel `sql_cases` | Analytics generate → Reviewer → execute |
-| **Routing** (intent accuracy) | supervisor routes to the right branch | LangSmith `fdm-routing` + Excel `routing_cases` | Supervisor (+ Intake/Decider) |
-| **Safety** (guard-correct, no-PII-leak) | input guard refuses unsafe/PII/injection; no leak | LangSmith `fdm-safety` + Excel `safety_redteam` | Input guard + Output PII scrub |
-| **Manage incident** (action-correct) | resolver picks the right action / approval | LangSmith `fdm-manage` + Excel `manage_cases` | Manage-Incident resolver |
-| **Reranker sweep** (tuning) | does reranking help + best `RERANK_CANDIDATES` | `eval/results/tuning/reranker_sweep_*.xlsx` + `TUNING_LOG.md` | `RERANK_CANDIDATES` dial in `rag/retriever.py` |
-| **Verifier calibration** (tuning) | is the Verifier too strict / too lax | `eval/results/tuning/verifier_calibration_*.xlsx` | Verifier strictness / `VERIFY_MAX_ATTEMPTS` |
-| **Diagnosis sweep** (tuning) | do extra corrective-RAG retries pay off | `eval/results/tuning/diagnosis_sweep_*.xlsx` | `MAX_DIAGNOSIS_REQUERIES` dial |
-| **Regression gate** (CI) | blocking metrics vs blessed baseline | `ci_gate.py` exit 0/1 + console | guards changes to all of the above |
+> **SUMMARY:** 
+> **Versioning + CI** sits under **Governance** (it's a change/process control, though it consumes Evaluation outputs). 
+> **Safety** is *cross-cutting*, not a standalone phase — its *evaluation* (input-guard red-team + PII-leak checks) lives under **Evaluation** (`safety_redteam`); its *enforcement* (PII masking, the input guard) lives under **Governance/Observability**.
 
-<sub>\* faithfulness/answer-relevance use the free OpenRouter judge → may show `n/a` under rate-limits; they are **advisory** (never block the CI gate). All other metrics are deterministic.</sub>
+**Evaluations carried out — what, where to see them, and what they validate.** Each dataset is graded into a **LangSmith Experiment** (per-example drill-down) and a sheet in `eval/results/eval_<ts>.xlsx`; tuning sweeps write to `eval/results/tuning/`.
 
-**Run order (fresh fork, after steps 0–4). Prereqs: `.env` has `GROQ_API_KEY`,
-`GOOGLE_API_KEY`, `LANGSMITH_API_KEY` (+ `OPENROUTER_API_KEY` for the eval judge); the DB
-is up; the RAG index is built.**
+
+| Evaluation                                                                 | What it measures                                                                              | Where to see the result                                       | What it validates in the workflow                    |
+| -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------- |
+| **Troubleshoot** (faithfulness*, answer-relevance*, needs-technician gate) | diagnosis grounded in retrieved context, answers the symptom, correct self-vs-technician gate | LangSmith `fdm-troubleshoot` + Excel `troubleshoot_cases`     | Diagnosis → Verifier → `needs_technician` gate       |
+| **Retrieval** (precision@k, recall@k, MRR, nDCG)                           | retriever surfaces the right manual pages                                                     | LangSmith `fdm-retrieval` + Excel `retrieval_labels`          | RAG retriever (`rag/retriever.py`) feeding Diagnosis |
+| **Text-to-SQL** (rows-match, read-only, no-phone)                          | analytics SQL is correct, read-only, never touches `phone`                                    | LangSmith `fdm-sql` + Excel `sql_cases`                       | Analytics generate → Reviewer → execute              |
+| **Routing** (intent accuracy)                                              | supervisor routes to the right branch                                                         | LangSmith `fdm-routing` + Excel `routing_cases`               | Supervisor (+ Intake/Decider)                        |
+| **Safety** (guard-correct, no-PII-leak)                                    | input guard refuses unsafe/PII/injection; no leak                                             | LangSmith `fdm-safety` + Excel `safety_redteam`               | Input guard + Output PII scrub                       |
+| **Manage incident** (action-correct)                                       | resolver picks the right action / approval                                                    | LangSmith `fdm-manage` + Excel `manage_cases`                 | Manage-Incident resolver                             |
+| **Reranker sweep** (tuning)                                                | does reranking help + best `RERANK_CANDIDATES`                                                | `eval/results/tuning/reranker_sweep_*.xlsx` + `TUNING_LOG.md` | `RERANK_CANDIDATES` dial in `rag/retriever.py`       |
+| **Verifier calibration** (tuning)                                          | is the Verifier too strict / too lax                                                          | `eval/results/tuning/verifier_calibration_*.xlsx`             | Verifier strictness / `VERIFY_MAX_ATTEMPTS`          |
+| **Diagnosis sweep** (tuning)                                               | do extra corrective-RAG retries pay off                                                       | `eval/results/tuning/diagnosis_sweep_*.xlsx`                  | `MAX_DIAGNOSIS_REQUERIES` dial                       |
+| **Regression gate** (CI)                                                   | blocking metrics vs blessed baseline                                                          | `ci_gate.py` exit 0/1 + console                               | guards changes to all of the above                   |
+
+
+ faithfulness/answer-relevance use the free OpenRouter judge → may show `n/a` under rate-limits; they are **advisory** (never block the CI gate). All other metrics are deterministic.
+
 ```bash
 # 5a — observability (tracing auto-on once LANGSMITH_TRACING=true)
 python observability/trace_smoke.py
@@ -265,10 +274,9 @@ python eval/tuning/diagnosis_sweep.py
 python eval/versioning_and_ci/ci_gate.py --bless   # bless baseline from valid runs
 python eval/versioning_and_ci/ci_gate.py           # gate: exit 0 (pass) / 1 (regression)
 
-# 5f — governance: review-queue flagging is AUTOMATIC during 5c/runtime;
-#      feedback (observability.log_feedback) is called by the Phase 6 UI
 ```
-Full guides: [`observability/README.md`](observability/README.md) and [`eval/README.md`](eval/README.md).
+
+Full guides: `[observability/README.md](observability/README.md)` and `[eval/README.md](eval/README.md)`.
 
 > **Reproducibility:** the datasets, build steps, and **deterministic** metrics
 > (routing/SQL/retrieval/safety/manage) reproduce exactly. **LLM-judge** metrics
@@ -276,26 +284,29 @@ Full guides: [`observability/README.md`](observability/README.md) and [`eval/REA
 > limits), so exact *scores* aren't bit-reproducible — the *structure and deterministic
 > results* are.
 
-### 6. Application (Phase 6) — ✅ **6a/6b/6c**
-A **Streamlit UI** for operators ([`app/`](app/)) talking only to `agents/api.py`:
+
+
+### 6. Application (Phase 6) —
+
+A **Streamlit UI** for operators (`[app/](app/)`) talking only to `agents/api.py` and organized in to 3 sub-phases:
+
 - **6a** — text chat + sidebar operator login + human-in-the-loop interrupts (clarify / decision / choice / approve).
 - **6b** — a **live activity feed** (per-agent decisions + tool calls, streamed via `astream`) with the answer **typing out** token-by-token; the feed persists as a collapsed expander.
 - **6c** — **👍/👎 feedback** on each answer → `observability.log_feedback(run_id, …)` on that turn's LangSmith run (a 👎 also flags it to the review queue).
 
 ---
 
+
+
 ## Notes
 
-- The `preventivemaintenance3.11/` folder is the virtual environment and should **not** be committed to
-  version control. Add it to `.gitignore`:
-
+- The `preventivemaintenance3.11/` folder is the virtual environment and should **not** be committed to version control. Add it to `.gitignore`:
   ```gitignore
   preventivemaintenance3.11/
   ```
-
 - If you ever need to start fresh, delete the folder and recreate it:
-
   ```bash
   rm -rf preventivemaintenance3.11
   python3 -m venv preventivemaintenance3.11
   ```
+
