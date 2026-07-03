@@ -3,8 +3,8 @@ run_readonly_query — execute a single LLM-generated read-only SELECT, safely.
 
 Validates the SQL (safety.validate_select_sql) and runs it on the SELECT-only
 connection (safety.get_readonly_connection) — two independent layers, so a write
-can never reach the data even if one layer were bypassed. Used by: Text-to-SQL
-agent (ad-hoc analytics the purpose-built tools don't cover).
+can never reach the data even if one layer were bypassed. Used by: Analytics (the
+text-to-SQL agent — ad-hoc analytics the purpose-built tools don't cover).
 """
 
 import sys

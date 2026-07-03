@@ -3,8 +3,8 @@ update_incident — record an incident's outcome and (by default) close it.
 
 Scoped write: UPDATEs ONLY `technician_comments`, `incident_closure_date`, and
 (optionally) `technician_id` on `incidents`, via the least-privilege write user.
-The reported facts, root cause, and resolution are immutable. Used by: Action,
-Manage Incident, Self Action.
+The reported facts, root cause, and resolution are immutable. Used by: Technician
+Action, Manage Incident, Self Action.
 """
 
 import sys

@@ -4,7 +4,8 @@ create_incident — open a new incident record for a diagnosed fault.
 Scoped write: INSERTs one row into `incidents` (the "create" fields only) via the
 least-privilege write user. Leaves technician_id / work_date / work_slot /
 technician_comments / incident_closure_date NULL — the incident starts OPEN.
-Used by: Action.
+Used by: Self Action (log a self-resolved incident) and Technician Action (open
+the incident before booking).
 """
 
 import sys

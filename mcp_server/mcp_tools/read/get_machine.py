@@ -1,7 +1,8 @@
 """
 get_machine — validate a machine exists and resolve its version/status/location.
 
-Used by: Intake (validate machine_id), Diagnosis (resolve mvc_code for RAG).
+Used by: Intake (validate machine_id + resolve mvc_code/status). Diagnosis does
+not call this — it reads mvc_code/symptom from state, populated by Intake.
 """
 
 import sys

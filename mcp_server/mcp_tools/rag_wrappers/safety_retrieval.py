@@ -3,7 +3,8 @@ safety_retrieval — MCP wrapper over rag/retriever.py (safety-guide search).
 
 Thin adapter: it reuses the project's RAG retriever and flattens each chunk's
 citation fields to the top level. The safety guide applies to all models, so no
-machine version filter is needed. Used by: Diagnosis, Guidance.
+machine version filter is needed. Used by: Diagnosis and the Advice agent (Self
+Action does not call this — it re-uses the safety context Diagnosis retrieved).
 """
 
 import sys

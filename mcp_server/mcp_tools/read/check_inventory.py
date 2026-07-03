@@ -1,7 +1,7 @@
 """
 check_inventory — stock / availability / bin / compatibility for a part.
 
-Used by: Diagnosis & Action (is the needed part available before a fix/booking?).
+Used by: Diagnosis (is the needed part available before recommending a fix?).
 Matches by exact part_id or a fuzzy part_name (LIKE).
 """
 

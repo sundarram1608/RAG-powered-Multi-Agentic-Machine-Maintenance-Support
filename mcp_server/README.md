@@ -1,7 +1,6 @@
 # MCP tool server
 
-The tools the agents call are plain Python functions in `mcp_tools/`, grouped by kind.
-`server.py` registers them with FastMCP so the LangGraph agents can call them as MCP tools.
+The tools the agents call are plain Python functions in `mcp_tools/`, grouped by their characteristics and purpose. `server.py` registers them with FastMCP so the LangGraph agents can call them as MCP tools.
 
 > **Design:** 
 >
@@ -9,7 +8,7 @@ The tools the agents call are plain Python functions in `mcp_tools/`, grouped by
 > - Only `run_readonly_query` runs **LLM-generated** SQL — and that is read-only + validated (see `safety.py`). 
 > - Writes happen only via the scoped write tools, never via generated SQL.
 
-##  Structure
+## Structure
 
 ```
 mcp_server/
@@ -55,7 +54,7 @@ stay standalone-testable). FastMCP derives each tool's schema from the function'
 | Transport           | Tool group                                           | How it runs                                                                           | Why                                                         |
 | ------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
 | **stdio** (default) | local data plane — 9 read + 2 RAG + 3 write tools    | the agent **auto-spawns** `server.py` as a child process; no port, no network surface | tools bundled with the agent, touching local MySQL + Chroma |
-| **streamable-HTTP** | shared services — `run_readonly_query`, `send_email` | runs as a **separate** `127.0.0.1:8000` **process**; the agent connects by URL        | "service-style" tools you could host separately       |
+| **streamable-HTTP** | shared services — `run_readonly_query`, `send_email` | runs as a **separate** `127.0.0.1:8000` **process**; the agent connects by URL        | "service-style" tools you could host separately             |
 
 
 A single FastMCP instance serves one transport, so these are two server
@@ -93,7 +92,7 @@ python mcp_server/server.py --selftest   # expect 14 stdio + 2 http tools
 - **What it does:** joins `machines` + `machine_versions` on `mvc_code`.
 - **Input:** `machine_id: str` (case-insensitive, normalized to upper).
 - **Output:** `{exists, machine_id, mvc_code, model_name, status, location}` or `{exists: False}`.
-- **Used by:** Intake (validate id), Diagnosis (get `mvc_code` for RAG).
+- **Used by:** Intake (validate the id + resolve `mvc_code`/status).
 - **Edge cases:** not found → `{exists: False}` (Intake re-asks); `m01`→`M01` (normalized); a **Decommissioned** machine returns `exists: True` with `status` flagged so the agent won't troubleshoot a retired unit.
 
 
@@ -159,7 +158,7 @@ python mcp_server/server.py --selftest   # expect 14 stdio + 2 http tools
 - **What it does:** matches `part_id` exactly or `part_name` via `LIKE`; adds `in_stock`/`low_stock` flags.
 - **Input:** `part: str` (id or name fragment).
 - **Output:** `[{part_id, part_name, category, compatible_mvc, quantity_on_hand, reorder_threshold, unit, bin_location, in_stock, low_stock}, …]`.
-- **Used by:** Diagnosis & Action (is the part available before recommending/booking?).
+- **Used by:** Diagnosis (is the part available before recommending a fix / weighing self-vs-technician?).
 - **Edge cases:** no match → `[]`; out of stock (qty 0) → `in_stock: False`; qty ≤ threshold → `low_stock: True`; ambiguous name → returns all matches.
 
 
@@ -170,7 +169,7 @@ python mcp_server/server.py --selftest   # expect 14 stdio + 2 http tools
 - **What it does:** searches `technician_schedule` for the earliest `Available` slot on the **booking day** (only slots *after* the booking time), then **+1 day**, then **+2 days**; if none across those three days, escalates to an active supervisor and computes a **1-hour slot** inside their 9AM-5PM shift (10:00–16:00), on the booking day if one still fits, else +1.
 - **Input:** `booking_moment: str` — `"YYYY-MM-DD HH:MM:SS"` (or just a date); defaults to `REFERENCE_TODAY` + the current clock time.
 - **Output:** `{assignee_role: "Technician", employee_id, date, availability_slot, shift_time, escalated: False}` · or `{assignee_role: "Supervisor", employee_id, date, availability_slot, escalated: True, note}` · or `{available: False, note}`. The returned `date` is the scheduled **work date** and may differ from the booking date.
-- **Used by:** Action (allocate someone to an incident).
+- **Used by:** Technician Action (allocate someone to an incident); also allow-listed to Manage Incident.
 - **Edge cases:** booking late in the day rolls forward to the next day's slots; no technician within 3 days → supervisor escalation with a computed slot; no active supervisor either → `{available: False}`. Returns `employee_id` only — **never the email** (PII; `send_email` resolves it internally).
 
 
@@ -204,7 +203,7 @@ spaces) so citations and answers read cleanly.
 - **What it does:** embeds `query` with BGE-M3, runs an `mvc_code`-filtered cosine search over Chroma, flattens the top-k chunks.
 - **Input:** `query: str` (symptom/question), `mvc_code: str` (from `get_machine`), `k: int = 5`.
 - **Output:** `[{text, source_file, page_start, page_end, distance}, …]` (smaller distance = more relevant).
-- **Used by:** Diagnosis, Guidance.
+- **Used by:** Diagnosis.
 - **Edge cases:** results are **scoped to one** `mvc_code` so a different model's manual never leaks in; unknown `mvc_code` / empty index → `[]`; blank `query` → `[]` (guard avoids a meaningless search).
 
 
@@ -215,7 +214,7 @@ spaces) so citations and answers read cleanly.
 - **What it does:** embeds `query`, runs a `doc_type='safety'`-filtered cosine search (**no** `mvc_code` **filter** — the safety guide applies to all models), flattens the top-k chunks.
 - **Input:** `query: str`, `k: int = 2`.
 - **Output:** `[{text, source_file, page_start, page_end, distance}, …]`.
-- **Used by:** Diagnosis, Self Action, and the **Advice** agent (which grounds general/preventive guidance in the safety guide — it needs no `mvc_code`, so advice works without a machine).
+- **Used by:** Diagnosis and the **Advice** agent (which grounds general/preventive guidance in the safety guide — it needs no `mvc_code`, so advice works without a machine). Self Action does **not** call this; it re-uses the safety context Diagnosis already retrieved (from state).
 - **Edge cases:** empty index → `[]`; blank `query` → `[]`.
 
 ---
@@ -245,7 +244,7 @@ denied with MySQL error 1142.)
 - **What it does:** generates `inc_{max+1}`, `INSERT`s the create-fields (`reported_date`=`REFERENCE_TODAY`, `reported_time`=current clock time); leaves `technician_id`/`work_date`/`work_slot`/`technician_comments`/`incident_closure_date` NULL → **open**.
 - **Input:** the five fields above (`machine_id`, `reported_by` = `employee_id`).
 - **Output:** `{ok: True, incident_id, machine_id, status: "open"}` · `{ok: False, error}`.
-- **Used by:** Action.
+- **Used by:** Self Action (log a self-resolved incident) and Technician Action (open the incident before booking).
 - **Edge cases:** unknown `machine_id`/`reported_by` → friendly validation error (not a raw FK error).
 
 
@@ -256,7 +255,7 @@ denied with MySQL error 1142.)
 - **What it does (one transaction):** **reassign** — if the incident already has a different assignee/slot, first frees that prior slot (→ `Available`); then if a `(date, employee_id)` schedule row exists & is `Available` → `UPDATE` it to `Booked` (**technician**), or if no row exists → `INSERT` a `Booked` row (**supervisor escalation**, `shift_time` NULL); then `UPDATE incidents` `technician_id` + `work_date` + `work_slot`.
 - **Input:** `incident_id`, `employee_id`, `date` (`YYYY-MM-DD`), `availability_slot` (e.g. `09:00-11:00`).
 - **Output:** `{ok: True, incident_id, employee_id, assignment_type: "technician"|"supervisor", booked_slot:{date, availability_slot}, reassigned_from}` · `{ok: False, error}`.
-- **Used by:** Action, Manage Incident (after `find_available_technician` / a chosen slot).
+- **Used by:** Technician Action, Manage Incident (after `find_available_technician` / a chosen slot).
 - **Edge cases:** unknown/closed incident → reject; unknown employee → reject; slot already `Booked` → reject (availability enforced — no overload); supervisor (no calendar row) → a new `Booked` row is inserted; **reassign** auto-frees the prior assignee's slot (`reassigned_from`).
 
 
@@ -267,7 +266,7 @@ denied with MySQL error 1142.)
 - **What it does:** `UPDATE`s **only** `technician_comments`, (if `close`) `incident_closure_date`=`REFERENCE_TODAY`, and (if `assignee_id` given) `technician_id` — **no schedule booking**. Cannot touch any other column.
 - **Input:** `incident_id`, `technician_comments`, `close: bool = True`, `assignee_id: str = None`.
 - **Output:** `{ok: True, incident_id, status: "closed"|"open"}` · `{ok: False, error}`.
-- **Used by:** Action, Manage Incident, **Self Action** (`assignee_id` = the operator, to record a self-resolved incident without booking a slot).
+- **Used by:** Technician Action, Manage Incident, **Self Action** (`assignee_id` = the operator, to record a self-resolved incident without booking a slot).
 - **Edge cases:** unknown incident → reject; closing an already-closed incident → reject; closing requires non-empty `technician_comments`; `assignee_id` is optional (default `None` → `technician_id` untouched, so existing callers are unaffected).
 
 ---
@@ -295,7 +294,7 @@ layers** (defense in depth):
 - **What it does:** validates the SQL, then runs the cleaned query on the SELECT-only connection.
 - **Input:** `sql: str` — a single read-only `SELECT`/`WITH` statement.
 - **Output:** `{ok: True, row_count, rows, sql_executed}` · `{ok: False, error, category: "validation"}` · `{ok: False, error, category: "database"}`.
-- **Used by:** Text-to-SQL agent.
+- **Used by:** Analytics (the text-to-SQL agent).
 - **Validation rules (**`safety.validate_select_sql`**):** non-empty · no comments (`--`, `#`, `/* */`) · single statement (no stacked `;`) · must start `SELECT`/`WITH` · no write/DDL/file keywords (`INSERT, UPDATE, DELETE, DROP, …, INTO, OUTFILE`) · **no PII column** `phone` (`email`/`full_name` are allowed — in-office policy) · auto-`LIMIT 200` if none given.
 - **Edge cases:** write/DDL → blocked at validation **and** denied by the read-only user; PII (`phone`) → validation reject **and**, as a backstop, any `phone` column is stripped from the result rows (so a `SELECT` * on `employees` can't surface it); multi-statement/comment → reject; no `LIMIT` → auto-capped; bad column/syntax → `category: "database"` so the agent can self-correct.
 

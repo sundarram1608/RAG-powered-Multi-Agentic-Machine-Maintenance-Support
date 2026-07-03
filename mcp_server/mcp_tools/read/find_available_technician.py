@@ -8,7 +8,7 @@ book_technician_slot commits it. Search policy (earliest wins):
     4.   else escalate to an active supervisor, given a 1-hour slot inside their
          9AM-5PM shift, on the booking day if one still fits, otherwise +1.
 
-Used by: Action (allocate someone to an incident).
+Used by: Technician Action (allocate someone to an incident); also allow-listed to Manage Incident.
 """
 
 import sys

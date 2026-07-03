@@ -7,7 +7,7 @@ Scoped write (one transaction via the least-privilege write user):
 then UPDATE the incident's technician_id + work_date + work_slot.
 On REASSIGN (the incident already had a different assignee/slot), the prior slot
 is first freed (set back to 'Available') in the same transaction.
-Used by: Action, Manage Incident (after find_available_technician / a chosen slot).
+Used by: Technician Action, Manage Incident (after find_available_technician / a chosen slot).
 """
 
 import sys

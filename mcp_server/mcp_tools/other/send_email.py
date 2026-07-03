@@ -5,7 +5,8 @@ PII-safe: the recipient's address is resolved internally from their employee_id
 and is NEVER passed in or returned. Content is chosen automatically from the
 recipient's role (operator / technician / supervisor) and filled from the
 incident. Sends via free Gmail SMTP (smtplib + an App Password in .env).
-Used by: Action.
+Used by: Technician Action (booking notifications) and Manage Incident (close /
+assign notifications).
 """
 
 import os

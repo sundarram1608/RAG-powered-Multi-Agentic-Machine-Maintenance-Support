@@ -3,7 +3,7 @@ user_manual_retrieval — MCP wrapper over rag/retriever.py (user-manual search)
 
 Thin adapter: it reuses the project's RAG retriever and flattens each chunk's
 citation fields (source_file, page_start, page_end) to the top level so the
-agent gets clean, low-noise passages to cite. Used by: Diagnosis, Guidance.
+agent gets clean, low-noise passages to cite. Used by: Diagnosis.
 """
 
 import sys
