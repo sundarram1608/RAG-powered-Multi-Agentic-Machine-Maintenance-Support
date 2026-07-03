@@ -335,7 +335,7 @@ FLUSH PRIVILEGES;
 - **What it does:** resolves the recipient's address **internally** from `employee_id`, picks the template by their **role** + incident state (operator = report confirmation incl. the allocated person's name, **or a resolution notice with the work done if the incident is already closed**; technician = work assignment; supervisor = escalation), fills it from the incident, and sends via Gmail SMTP.
 - **Input:** `to_employee_id: str`, `incident_id: str`, `dry_run: bool = False` (set `True` to compose without sending).
 - **Output:** `{ok: True, dry_run: False, to_employee_id, role, subject, sent: True}` · `{ok: True, dry_run: True, …, subject, body}` · `{ok: False, error}`.
-- **Used by:** Action.
+- **Used by:** Technician Action (booking notifications) and Manage Incident (close / assign notifications).
 - **PII:** the email address is **never** passed in or returned — only `to_employee_id` + `role` appear in the output (the address is resolved internally; `send_email` is the only place it's used). `full_name` may appear in the body (in-office policy).
 - **Edge cases:** unknown employee/incident → error; no email on file → error; `dry_run=False` but `AGENT_EMAIL`/app password unset → `{ok: False, error: "email not configured"}` (never a silent failure).
 
