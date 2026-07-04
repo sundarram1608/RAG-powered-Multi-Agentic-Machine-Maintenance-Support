@@ -124,16 +124,16 @@ The **Knowledge Base** has two layers and both feed the context to the LLM agent
 The **tools** are the only way the agents act on the Knowledge Base. Each tool is a plain Python function in `mcp_server/mcp_tools/`; 
 `mcp_server/server.py` registers them with **FastMCP**, which turns each function's name + docstring + type hints into the schema the LLM sees.
 
-**16 tools, in four groups:**
+**17 tools, in four groups:**
 
-- **read (9)** — `get_machine`, `get_overdue_status`, `get_maintenance_history`, `get_incident_history`, `get_incident`, `list_incidents`, `check_inventory`, `find_available_technician`, `list_available_technicians` (DB reads).
+- **read (10)** — `get_machine`, `get_overdue_status`, `get_maintenance_history`, `get_incident_history`, `get_incident`, `list_incidents`, `check_inventory`, `find_available_technician`, `list_available_technicians`, `list_machine_versions` (DB reads).
 - **rag (2)** — `user_manual_retrieval`, `safety_retrieval` (thin wrappers over `rag/retriever.py`).
 - **write (3)** — `create_incident`, `book_technician_slot`, `update_incident` (scoped writes to `incidents` / `technician_schedule` only).
 - **other (2)** — `run_readonly_query` (LLM-generated read-only SQL), `send_email` (notifications from "Agentic FDM Services").
 
 **Two MCP transports** (both operational — see `mcp_server/README.md`):
 
-- **stdio** (default) serves the 14 local-data tools (read + rag + write); the agent auto-spawns it.
+- **stdio** (default) serves the 15 local-data tools (read + rag + write); the agent auto-spawns it.
 - **streamable-HTTP** (`127.0.0.1:8000`) serves the 2 "service" tools (`run_readonly_query`, `send_email`) as a separate process.
 
 **Safety & PII**: three MySQL identities — `admin`, `maint_readonly` (SELECT only, for generated SQL), and `maint_write` (INSERT/UPDATE on the two
@@ -148,7 +148,7 @@ python mcp_server/server.py http        # -> http://127.0.0.1:8000/mcp
 # (the stdio server is auto-spawned by the agent; run by hand: python mcp_server/server.py)
 
 # smoke test — list the tools each transport exposes
-python mcp_server/server.py --selftest  # expect 14 stdio + 2 http tools
+python mcp_server/server.py --selftest  # expect 15 stdio + 2 http tools
 ```
 
 For live `send_email`, set all the necessary email and passwords including `AGENT_EMAIL` + `AGENT_EMAIL_APP_PASSWORD` in `.env`.
@@ -164,7 +164,7 @@ Full guide → `[mcp_server/README.md](mcp_server/README.md)`
 compiled with a `MemorySaver` checkpointer. Whenever a user asks something to the AI Assistant, the Input guard screens every turn; the **Supervisor** routes to one of five sub-flows:
 
 - **troubleshoot** — Intake (resolve machine + symptom) → Diagnosis (RAG manual/safety + DB facts, corrective-RAG) → Verifier (independent RAG-triad + safety judge) → the `needs_technician` gate → **Self Action** (operator self-fix) / **Technician Action** (book + notify) / Decider.
-- **advice** — the **Advice** agent answers general/preventive/how-to questions ("what to do if the bed heats rapidly?") grounded in the safety guide, no machine or incident. If it's unclear whether the user is facing the fault now or just asking, it asks — and if they *are* facing it, it hands off to troubleshoot.
+- **advice** — the **Advice** agent answers general/preventive/how-to questions ("what to do if the bed heats rapidly?") with **no machine or incident**. Staying machine-agnostic, it grounds the answer in the **safety guide + every model's manual** (`list_machine_versions` → per-model `user_manual_retrieval` + `safety_retrieval`), and the Output agent writes **one shared answer plus per-model deltas** (falling back to a single answer when the models don't differ). If it's unclear whether the user is facing the fault now or just asking, it asks — and if they *are* facing it, it hands off to troubleshoot (which is where an incident can then be opened/booked).
 - **analytics** — text-to-SQL Generator → independent Reviewer → execute (read-only) → answer.
 - **manage_incident** — resolve → approve → execute (close / assign / comment).
 - **general** — a capability/greeting/farewell reply.

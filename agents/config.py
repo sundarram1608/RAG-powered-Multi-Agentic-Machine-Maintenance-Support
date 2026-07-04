@@ -107,6 +107,7 @@ MCP_SERVERS = {
 AGENT_TOOLS = {
                 "input": [],
                 "supervisor": [],
+                "advice": ["list_machine_versions", "user_manual_retrieval", "safety_retrieval"],
                 "analytics": ["run_readonly_query"],
                 "text_to_sql_reviewer": [],
                 "manage_incident": [

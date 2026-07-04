@@ -40,7 +40,7 @@ human-in-the-loop before anything irreversible.
 |---|---|---|---|---|
 | 1 | **Input** | Llama | — | scope + prompt-injection / PII-request guard |
 | 2 | **Supervisor** | Llama | — | route: troubleshoot / advice / analytics / manage_incident / general |
-| 3 | **Advice** | Llama | `safety_retrieval` | general/preventive/how-to questions: answer (grounded) · ask "facing it now?" · hand off to troubleshoot |
+| 3 | **Advice** | Llama | `list_machine_versions`, `user_manual_retrieval`, `safety_retrieval` | general/preventive/how-to questions: answer (grounded in every model's manual + safety, machine-agnostic) · ask "facing it now?" · hand off to troubleshoot |
 | 4 | **Analytics** | Llama | `run_readonly_query` | coder: NL → read-only SQL; executor: run approved SQL |
 | 5 | **Text-to-SQL Reviewer** | **Gemini** | — | judge the SQL: grounded / relevant / safe; loop back if not |
 | 6 | **Manage Incident** | Llama | `get_incident`, `list_incidents`, `list_available_technicians`, `find_available_technician`, `book_technician_slot`, `update_incident`, `send_email` | direct action on a KNOWN incident (close, assign/reassign, update) |
@@ -55,9 +55,10 @@ human-in-the-loop before anything irreversible.
 **Flow (narrative):** user turn → **Input** (scope/safety) → **Supervisor** routes →
 *analytics* = **Analytics** (coder) → **Text-to-SQL Reviewer** → *(approved)*
 **Analytics** (execute) → **Output**; *(reviewer-reject or DB-error loops back to
-the coder, capped at `ANALYTICS_MAX_ATTEMPTS`)*. *advice* = **Advice** (grounded
-general/preventive guidance; asks "facing it now or just asking?" when unclear, and
-hands off to troubleshoot if the user is facing it) → **Output**; *manage_incident* =
+the coder, capped at `ANALYTICS_MAX_ATTEMPTS`)*. *advice* = **Advice** (machine-agnostic
+general/preventive guidance grounded in the safety guide + every model's manual, rendered
+as one shared answer + per-model deltas; asks "facing it now or just asking?" when unclear,
+and hands off to troubleshoot if the user is facing it) → **Output**; *manage_incident* =
 **Manage Incident** (approval interrupt before writes) → **Output**; *general* = direct
 **Output**; *troubleshoot* = **Intake** (clarify via interrupt if details missing)
 → **Diagnosis** (RAG + DB) → **Verifier** (retry loop, capped at
@@ -162,20 +163,21 @@ shows the friendly "free-tier limit — resets at midnight" message.
 The agents connect to **both** MCP servers at once via
 `langchain-mcp-adapters`' `MultiServerMCPClient` (`mcp_client.py`):
 
-- **stdio** (`local_data`) — auto-spawned; the 14 read/RAG/write tools.
+- **stdio** (`local_data`) — auto-spawned; the 15 read/RAG/write tools.
 - **streamable-HTTP** (`services`, `127.0.0.1:8000`) — separate process; `run_readonly_query`, `send_email`.
 
-`get_all_tools()` returns the union (16 tools); `tools_for(agent, tools)` filters
+`get_all_tools()` returns the union (17 tools); `tools_for(agent, tools)` filters
 to each agent's allow-list (`config.AGENT_TOOLS`):
 
 | Agent | Tools |
 |---|---|
 | input · supervisor · text_to_sql_reviewer · verifier · decider · output | *(none)* |
+| advice | `list_machine_versions`, `user_manual_retrieval`, `safety_retrieval` |
 | analytics | `run_readonly_query` |
 | intake | `get_machine` |
 | diagnosis | `user_manual_retrieval`, `safety_retrieval`, `get_overdue_status`, `get_maintenance_history`, `get_incident_history`, `check_inventory` |
 | manage_incident | `get_incident`, `list_incidents`, `list_available_technicians`, `find_available_technician`, `book_technician_slot`, `update_incident`, `send_email` |
-| self_action | `user_manual_retrieval`, `safety_retrieval`, `create_incident`, `update_incident` |
+| self_action | `create_incident`, `update_incident` |
 | technician_action | `find_available_technician`, `create_incident`, `book_technician_slot`, `update_incident`, `send_email` |
 
 **Launch order:** `python mcp_server/server.py http` (HTTP services server) → then
@@ -199,7 +201,7 @@ The plumbing every node stands on (no nodes yet):
 
 **Milestone test** (`python agents/mcp_client.py`, under a clearly-marked
 `MILESTONE TEST` header):
-- **Part 1 (no API key):** connect to both servers, list the 16 tools, print each agent's resolved allow-list.
+- **Part 1 (no API key):** connect to both servers, list the 17 tools, print each agent's resolved allow-list.
 - **Part 2 (needs `GROQ_API_KEY`):** bind `tools_for("intake")` to the reasoner and confirm it emits a `get_machine` tool call.
 
 ---
@@ -240,12 +242,12 @@ The plumbing every node stands on (no nodes yet):
 
 ### 3. Advice Agent — `nodes/advice.py`  ✅
 - **Purpose:** answer general / preventive / how-to / hypothetical FDM questions ("what to do if the bed heats rapidly?", "how do I prevent clogs?") that are NOT a current fault — with **no machine and no incident**. A first-class agent (own node + prompt + structured output), a peer of Analytics.
-- **LLM:** **Groq Llama 3.3 70B** (triage). **Tool:** `safety_retrieval` (machine-agnostic) on the answer path; the grounded reply is composed by the **Output** agent in *advice* mode.
+- **LLM:** **Groq Llama 3.3 70B** (triage). **Tools (answer path):** `list_machine_versions` → per-model `user_manual_retrieval` + `safety_retrieval` — all machine-agnostic (it retrieves *every* model's manual rather than asking which machine); the grounded reply is composed by the **Output** agent in *advice* mode.
 - **Input format** (state read): `user_input`, the recent `messages` window + the prior `clarification_question` (so a disambiguating reply is read IN CONTEXT).
 - **Output format** (Pydantic `AdvicePlan` via `with_structured_output`) → `advice_route` (`answer`/`ask`/`troubleshoot`), `advice_topic`, `clarification_question`/`needs_clarification` (ask), `retrieved_context` (answer), or `intent="troubleshoot"`+`symptom` (handoff); tags `prompt_versions["advice"]`.
 - **Routing:** answer → **Output** (advice mode) · ask → interrupt, then re-triage the reply · troubleshoot handoff → **Intake** (`route_after_advice`).
 - **Disambiguation (LLM-based, no regex):** when it's unclear whether the user is FACING the fault now or just asking, `route="ask"` → the graph interrupts with one question ("Are you seeing this on a machine right now — I can diagnose it — or asking for general guidance?"); the reply is re-classified using the conversation + that question — "yes, on M05" → hand off to troubleshoot; "just asking" → answer. After the re-ask cap it answers generally rather than loop.
-- **Grounding:** the (machine-agnostic) **safety guide** via `safety_retrieval`, plus general best-practice; framed as guidance, not a machine-specific diagnosis.
+- **Grounding:** machine-agnostic but fleet-wide — the **safety guide** (`safety_retrieval`, all models) **plus every model's user manual** (`list_machine_versions` → `user_manual_retrieval` per `mvc_code`, each chunk tagged with its model). Output writes **one shared answer + per-model deltas** (a single answer when models don't differ). Framed as guidance, not a machine-specific diagnosis.
 - **Prompt:** `prompts/advice.py` (`ADVICE_TRIAGE_SYSTEM`) · v1.1.0; the answer is rendered by `prompts/output.py` MODE=advice.
 
 ### 4. Analytics Agent (Text-to-SQL coder + executor) — `nodes/analytics.py`  ✅
@@ -372,7 +374,7 @@ The plumbing every node stands on (no nodes yet):
 - **PII scrub:** regex strips any email / 7+-digit phone from the final text (belt-and-suspenders; tools already keep PII out of state).
 - **Verifier exhaustion:** routed to Technician Action (auto-dispatch); Output states a technician will assess it (no apologetic caveat).
 - **Edge cases:** empty analytics result → "no matching records"; `error` action → generic apology. Systematic faithfulness eval is handled in Phase 5 (`eval/` troubleshoot faithfulness/answer-relevance judges).
-- **Prompt:** `prompts/output.py` · v1.5.0 (general + analytics + **advice** modes; analytics multi-row → table with complaint + reporter/assignee columns; advice = grounded safety-first guidance).
+- **Prompt:** `prompts/output.py` · v1.6.0 (general + analytics + **advice** modes; analytics multi-row → table with complaint + reporter/assignee columns; advice = grounded safety-first guidance across **all models** — one shared answer + per-model deltas).
 
 ## Graph assembly (Phase 4c)
 
@@ -459,7 +461,7 @@ flowchart TD
 Five sub-flows hang off the supervisor's route, and **everything converges
 at `output → END`**:
 - **general** → `output` (LLM writes a capability/greeting/farewell reply).
-- **advice** → `advice` (LLM triage: a general/preventive question → retrieve the safety guide → `output` answers in *advice* mode; if the reply is unclear it interrupts to ask "facing it now or just asking?"; if the user is actually facing the fault it hands off to `intake` → troubleshoot). No machine/incident.
+- **advice** → `advice` (LLM triage: a general/preventive question → retrieve the safety guide **+ every model's manual** (`list_machine_versions` → per-model `user_manual_retrieval`) → `output` answers in *advice* mode with one shared answer + per-model deltas; if the reply is unclear it interrupts to ask "facing it now or just asking?"; if the user is actually facing the fault it hands off to `intake` → troubleshoot). No machine/incident.
 - **analytics** → `analytics_generate → text_to_sql_reviewer → analytics_execute → output`, with two loops back to `analytics_generate` (reviewer-reject, db-error).
 - **manage_incident** → `manage_resolve` (interrupts for clarify / choose-technician / approve) → `manage_execute → output`.
 - **troubleshoot** → `intake` (interrupts to clarify machine/symptom; if the user is stuck it guides them to the info, and after the re-ask cap routes to `output` with a give-up message) → `diagnosis → verifier`, then the `needs_technician` gate → `decider` / `technician_action`, and `self_action` (interrupts for the 2 buttons).

@@ -53,13 +53,13 @@ stay standalone-testable). FastMCP derives each tool's schema from the function'
 
 | Transport           | Tool group                                           | How it runs                                                                           | Why                                                         |
 | ------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| **stdio** (default) | local data plane — 9 read + 2 RAG + 3 write tools    | the agent **auto-spawns** `server.py` as a child process; no port, no network surface | tools bundled with the agent, touching local MySQL + Chroma |
+| **stdio** (default) | local data plane — 10 read + 2 RAG + 3 write tools   | the agent **auto-spawns** `server.py` as a child process; no port, no network surface | tools bundled with the agent, touching local MySQL + Chroma |
 | **streamable-HTTP** | shared services — `run_readonly_query`, `send_email` | runs as a **separate** `127.0.0.1:8000` **process**; the agent connects by URL        | "service-style" tools you could host separately             |
 
 
 A single FastMCP instance serves one transport, so these are two server
 instances (built from the same file). The agent layer aggregates both with
-`langchain-mcp-adapters`' `MultiServerMCPClient`, presenting the union of all 16
+`langchain-mcp-adapters`' `MultiServerMCPClient`, presenting the union of all 17
 tools to the LLM.
 
 **Running it**
@@ -72,7 +72,7 @@ python mcp_server/server.py http        # -> http://127.0.0.1:8000/mcp
 #    to run it by hand: python mcp_server/server.py            # (default = stdio)
 
 # smoke test — list the tools each transport exposes, no LLM/network:
-python mcp_server/server.py --selftest   # expect 14 stdio + 2 http tools
+python mcp_server/server.py --selftest   # expect 15 stdio + 2 http tools
 ```
 
 > **First-time prerequisites:** `python mcp_server/setup_db_users.py` (DB users)
@@ -83,6 +83,8 @@ python mcp_server/server.py --selftest   # expect 14 stdio + 2 http tools
 
 
 ## Read tools (`mcp_tools/read/`)
+
+- **read tools (10)** — `get_machine`, `get_overdue_status`, `get_maintenance_history`, `get_incident_history`, `get_incident`, `list_incidents`, `check_inventory`, `find_available_technician`, `list_available_technicians`, `list_machine_versions` (DB reads).
 
 
 
@@ -128,7 +130,7 @@ python mcp_server/server.py --selftest   # expect 14 stdio + 2 http tools
 - **Used by:** Diagnosis ("has this happened before / how was it fixed?").
 - **Edge cases:** **PII-minimized** — omits `reported_by`/`technician_id`; **open** incidents (NULL resolution/closure) are included; none → `[]`.
 
-
+**NOTE:** The above tools have the same arguments, but target different tables in the database. So there are separate functions. This is a trade off decided to ensure deterministic nature of the tools over optimization of the codebase. 
 
 ### `get_incident(incident_id)`
 
@@ -166,10 +168,18 @@ python mcp_server/server.py --selftest   # expect 14 stdio + 2 http tools
 ### `find_available_technician(booking_moment=None)`
 
 - **Purpose:** propose who should do the work and **on what date/slot**; **escalate to a supervisor** if no technician is free. Read-only — it only proposes; `book_technician_slot` commits.
+
+> This tool returns one concrete proposal — a single assignee + work date + slot:
+>
+> - Earliest-wins search across a 3-day window: booking day → +1 → +2 (and on day 0, only slots starting after the current booking time).
+> - Escalates: if no technician is free in those 3 days, it falls back to an active supervisor and computes a 1-hour slot in their 9–5 shift.
+> - Booking-moment aware: takes booking_moment and reasons about "after now."
+
 - **What it does:** searches `technician_schedule` for the earliest `Available` slot on the **booking day** (only slots *after* the booking time), then **+1 day**, then **+2 days**; if none across those three days, escalates to an active supervisor and computes a **1-hour slot** inside their 9AM-5PM shift (10:00–16:00), on the booking day if one still fits, else +1.
 - **Input:** `booking_moment: str` — `"YYYY-MM-DD HH:MM:SS"` (or just a date); defaults to `REFERENCE_TODAY` + the current clock time.
-- **Output:** `{assignee_role: "Technician", employee_id, date, availability_slot, shift_time, escalated: False}` · or `{assignee_role: "Supervisor", employee_id, date, availability_slot, escalated: True, note}` · or `{available: False, note}`. The returned `date` is the scheduled **work date** and may differ from the booking date.
-- **Used by:** Technician Action (allocate someone to an incident); also allow-listed to Manage Incident.
+- **Output:** Returns a dict (one answer) with an escalated flag, or {available: False}.
+`{assignee_role: "Technician", employee_id, date, availability_slot, shift_time, escalated: False}` · or `{assignee_role: "Supervisor", employee_id, date, availability_slot, escalated: True, note}` · or `{available: False, note}`. The returned `date` is the scheduled **work date** and may differ from the booking date.
+- **Used by:** Technician Action (allocate someone to an incident); also allow-listed to Manage Incident. This is the autonomous booking path, where the agent picks and books without asking.
 - **Edge cases:** booking late in the day rolls forward to the next day's slots; no technician within 3 days → supervisor escalation with a computed slot; no active supervisor either → `{available: False}`. Returns `employee_id` only — **never the email** (PII; `send_email` resolves it internally).
 
 
@@ -177,17 +187,35 @@ python mcp_server/server.py --selftest   # expect 14 stdio + 2 http tools
 ### `list_available_technicians(from_date=None, employee_id=None)`
 
 - **Purpose:** list assignable technicians (earliest free slot **per** technician) so a manager can **choose** — vs `find_available_technician`, which auto-picks one and escalates.
+
+> This tool returns a list — the earliest free slot for each active technician, soonest first:
+>
+> - There is no escalation and fetches technicians only, never a supervisor.
+> - There is no 3-day cap just "on/after from_date."
+> Optional employee_id to check one technician (empty list = that person isn't free).
+
 - **What it does:** `Available` slots on/after `from_date` joined to active `Technician`s, deduped to the earliest per technician; optional `employee_id` restricts to one (empty ⇒ unavailable).
 - **Input:** `from_date: str` (default `REFERENCE_TODAY`), `employee_id: str` (optional).
 - **Output:** `[{employee_id, date, availability_slot, shift_time}, …]` (soonest first) · `[]` if none.
-- **Used by:** Manage Incident (present technicians to choose for assign/reassign).
+- **Used by:** Manage Incident (present technicians to choose for assign/reassign, where a human manager is choosing who to assign/reassign and needs a menu).
 - **Edge cases:** excludes supervisor-inserted rows (technicians only); named technician with no free slot → `[]`.
+
+### `list_machine_versions()`
+
+- **Purpose:** list every machine version (model) the plant runs, from `machine_versions` (the single source of truth) — so a caller can iterate the models without hardcoding them.
+- **What it does:** `SELECT mvc_code, model_name, machine_type, manufacturer FROM machine_versions ORDER BY mvc_code`.
+- **Input:** none.
+- **Output:** `[{mvc_code, model_name, machine_type, manufacturer}, …]` (one row per version).
+- **Used by:** the **Advice** agent — it is machine-agnostic, so to answer a how-to across the whole fleet it lists the versions, then retrieves each model's manual (`user_manual_retrieval`) and composes one shared answer + per-model deltas.
+- **Edge cases:** onboarding a new version in `machine_versions` makes it appear automatically (no hardcoding/drift).
 
 ---
 
 
 
 ## RAG tools (`mcp_tools/rag_wrappers/`)
+
+- **rag (2)** — `user_manual_retrieval`, `safety_retrieval` (thin wrappers over `rag/retriever.py`).
 
 Thin MCP adapters over `rag/retriever.py` so retrieval is exposed alongside the DB
 tools (one uniform tool interface for the agent). Each flattens the retriever's
@@ -203,7 +231,7 @@ spaces) so citations and answers read cleanly.
 - **What it does:** embeds `query` with BGE-M3, runs an `mvc_code`-filtered cosine search over Chroma, flattens the top-k chunks.
 - **Input:** `query: str` (symptom/question), `mvc_code: str` (from `get_machine`), `k: int = 5`.
 - **Output:** `[{text, source_file, page_start, page_end, distance}, …]` (smaller distance = more relevant).
-- **Used by:** Diagnosis.
+- **Used by:** Diagnosis (for the resolved machine's model); and the **Advice** agent, which calls it once per model (via `list_machine_versions`) to ground a machine-agnostic how-to across the whole fleet.
 - **Edge cases:** results are **scoped to one** `mvc_code` so a different model's manual never leaks in; unknown `mvc_code` / empty index → `[]`; blank `query` → `[]` (guard avoids a meaningless search).
 
 
@@ -222,6 +250,8 @@ spaces) so citations and answers read cleanly.
 
 
 ## Write tools (`mcp_tools/write/`)
+
+- **write (3)** — `create_incident`, `book_technician_slot`, `update_incident`
 
 The only ways the workflow mutates the database. Write-safety model:
 
@@ -274,6 +304,8 @@ denied with MySQL error 1142.)
 
 
 ## Other tools (`mcp_tools/other/`)
+
+- **other (2)** — `run_readonly_query` (LLM-generated read-only SQL), `send_email` (notifications from "Agentic FDM Services").
 
 
 

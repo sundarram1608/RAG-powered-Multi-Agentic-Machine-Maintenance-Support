@@ -2,15 +2,21 @@
 advice.py — Advice Agent node (general / preventive / how-to maintenance questions).
 
 Triages the question in conversation context (AdvicePlan):
-  - answer      : a general/preventive question -> retrieve the safety guide and let the
-                  Output agent compose grounded guidance (advice mode). No machine/incident.
+  - answer      : a general/preventive question -> gather machine-agnostic grounding
+                  (safety guide + EVERY model's manual) and let the Output agent compose
+                  a shared answer + per-model deltas (advice mode). No machine/incident.
   - ask         : unclear if the user is facing this fault now -> ask one disambiguating
                   question (surfaced via the graph's interrupt).
   - troubleshoot: they've confirmed a live fault -> hand off to Intake/Diagnosis
                   (sets intent="troubleshoot" + symptom).
 
-LLM: Groq Llama 3.3 70B (reasoner). Tool: safety_retrieval (answer path only — it is
-machine-agnostic, so advice needs no machine id). Prompt: prompts/advice.py.
+Advice stays machine-agnostic: instead of asking which machine, the answer path lists
+the fleet's versions (list_machine_versions) and retrieves each model's manual, tagging
+every chunk with its model so Output can write one shared answer and note the
+model-specific differences — no machine id ever required.
+
+LLM: Groq Llama 3.3 70B (reasoner). Tools (answer path): list_machine_versions,
+user_manual_retrieval (per model), safety_retrieval. Prompt: prompts/advice.py.
 """
 
 import sys
@@ -27,12 +33,32 @@ from prompts.advice import ADVICE_TRIAGE_SYSTEM, ADVICE_TRIAGE_VERSION
 from langchain_core.messages import HumanMessage, SystemMessage
 
 
-async def _safety(query: str) -> list:
-    streaming.emit_tool("safety_retrieval", {"query": query})
+async def _call(tool_name: str, args: dict) -> list:
+    streaming.emit_tool(tool_name, args)
     tools = await mcp_client.get_all_tools()
-    tool = next(t for t in tools if t.name == "safety_retrieval")
-    return mcp_client.parse_tool_result(await tool.ainvoke({"query": query, "k": 4}),
-                                        expect_list=True)
+    tool = next(t for t in tools if t.name == tool_name)
+    return mcp_client.parse_tool_result(await tool.ainvoke(args), expect_list=True)
+
+
+async def _grounding(query: str) -> list:
+    """Machine-agnostic grounding for a how-to: the safety guide (all models) + each
+    model's user manual, so Output can write a shared answer + per-model deltas. Every
+    manual chunk is tagged with its model (model_name/mvc_code); safety chunks are
+    tagged scope='safety (all models)' so Output can tell them apart."""
+    safety = await _call("safety_retrieval", {"query": query, "k": 4})
+    for chunk in safety:
+        chunk["scope"] = "safety (all models)"
+    context = list(safety)
+
+    versions = await _call("list_machine_versions", {})   # [{mvc_code, model_name, ...}]
+    for v in versions:
+        mvc, model = v.get("mvc_code"), v.get("model_name")
+        chunks = await _call("user_manual_retrieval",
+                             {"query": query, "mvc_code": mvc, "k": 3})
+        for chunk in chunks:
+            chunk["mvc_code"], chunk["model_name"] = mvc, model
+        context.extend(chunks)
+    return context
 
 
 async def advice_node(state: dict) -> dict:
@@ -69,7 +95,8 @@ async def advice_node(state: dict) -> dict:
         return {"advice_route": "troubleshoot", "intent": "troubleshoot", "symptom": topic,
                 "needs_clarification": False, "prompt_versions": versions}
 
-    # answer: ground in the (machine-agnostic) safety guide; Output composes the reply.
-    safety = await _safety(topic)
-    return {"advice_route": "answer", "retrieved_context": safety, "advice_topic": topic,
+    # answer: gather machine-agnostic grounding (safety + every model's manual, tagged);
+    # Output composes one shared answer + per-model deltas.
+    grounding = await _grounding(topic)
+    return {"advice_route": "answer", "retrieved_context": grounding, "advice_topic": topic,
             "needs_clarification": False, "prompt_versions": versions}

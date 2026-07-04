@@ -109,9 +109,12 @@ def output_node(state: dict) -> dict:
     elif intent == "analytics":                                # LLM (exact quoting)
         text = _llm("analytics", f"User question: {state.get('user_input', '')}\n"
                                  f"Result rows (JSON): {state.get('sql_result')}")
-    elif intent == "advice":                                   # LLM (grounded in safety guide)
-        text = _llm("advice", f"Question / topic: {state.get('advice_topic') or state.get('user_input', '')}\n"
-                              f"Safety-guide passages: {state.get('retrieved_context')}")
+    elif intent == "advice":                                   # LLM (grounded, all models)
+        text = _llm("advice",
+                    f"Question / topic: {state.get('advice_topic') or state.get('user_input', '')}\n"
+                    f"Grounding passages (each manual chunk tagged with model_name + mvc_code; "
+                    f"safety-guide chunks tagged scope='safety (all models)'): "
+                    f"{state.get('retrieved_context')}")
     elif intent == "manage_incident":                          # templated
         text = _manage(state)
     elif action == "self_resolved":                            # templated
