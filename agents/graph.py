@@ -249,24 +249,57 @@ def build_graph() -> StateGraph:
 app_graph = build_graph().compile(checkpointer=MemorySaver())
 
 
+def render_png(graph, path: str, width: int = 2400) -> str:
+    """Render the graph to a HIGH-RES PNG via mermaid.ink.
+
+    LangGraph's built-in draw_mermaid_png() renders at ~950px (blurry when zoomed).
+    mermaid.ink honours a `width` query param (scale is ignored / 503s past a pixel
+    cap), so we hit its API directly with the same base64 encoding LangChain uses,
+    at `width` px (default 2400 -> ~2400x2850, crisp). Falls back to the built-in
+    default-res render if the API is unreachable. Returns "hd" or "default".
+    """
+    import base64
+    import urllib.parse
+
+    import requests
+
+    mermaid = graph.draw_mermaid()
+    encoded = base64.b64encode(mermaid.encode("utf8")).decode("ascii")
+    bg = urllib.parse.quote("!white", safe="")
+    url = f"https://mermaid.ink/img/{encoded}?type=png&bgColor={bg}&width={width}"
+    try:
+        resp = requests.get(url, timeout=30)
+        resp.raise_for_status()
+        with open(path, "wb") as f:
+            f.write(resp.content)
+        return "hd"
+    except Exception:  # network / 503 / no requests -> built-in default-res render
+        graph.draw_mermaid_png(output_file_path=path)
+        return "default"
+
+
 # === SMOKE / RENDER ===
-#   python agents/graph.py           -> print node/edge counts + the mermaid source
-#   python agents/graph.py --png     -> render agents/graph.png (via mermaid.ink; needs internet)
-#   python agents/graph.py --png X.png  -> render to a custom path
+#   python agents/graph.py                -> print node/edge counts + the mermaid source
+#   python agents/graph.py --png          -> render HD agents/graph.png (via mermaid.ink)
+#   python agents/graph.py --png X.png    -> render to a custom path
+#   python agents/graph.py --png --width 3200  -> even higher resolution
 if __name__ == "__main__":
     import argparse
 
     default_png = str(Path(__file__).resolve().parent / "graph.png")  # agents/graph.png
     parser = argparse.ArgumentParser(description="Compile the LangGraph workflow; print or render it.")
     parser.add_argument("--png", nargs="?", const=default_png, metavar="PATH",
-                        help="render the graph to a PNG (default: agents/graph.png) "
+                        help="render the graph to a HD PNG (default: agents/graph.png) "
                              "via mermaid.ink — needs internet")
+    parser.add_argument("--width", type=int, default=2400,
+                        help="PNG width in px (default 2400; higher = sharper/larger)")
     args = parser.parse_args()
 
     g = app_graph.get_graph()
     print(f"Compiled: {len(g.nodes)} nodes, {len(g.edges)} edges\n")
     if args.png:
-        g.draw_mermaid_png(output_file_path=args.png)
-        print(f"Wrote {args.png}")
+        mode = render_png(g, args.png, width=args.width)
+        note = f" ({args.width}px HD)" if mode == "hd" else " (default res — mermaid.ink unreachable)"
+        print(f"Wrote {args.png}{note}")
     else:
         print(g.draw_mermaid())

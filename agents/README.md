@@ -428,10 +428,11 @@ Compiled LangGraph workflow — 17 nodes / 32 edges
 
 > *LangGraph's native render colours every node the same — it can't mark the interrupt nodes, because* `interrupt()` *is called inside a node's body at runtime, not part of the graph's static structure. For which nodes pause, see the **amber** nodes in the mermaid diagram below (or the Interrupts table in §4).*
 
-The PNG above is LangGraph's own render (`app_graph.get_graph().draw_mermaid_png()`).
+The PNG above is a **HD** render of LangGraph's own mermaid (2400px wide).
 Regenerate it with `python agents/graph.py --png` (writes `agents/graph.png` via
-mermaid.ink; needs internet), or print the raw mermaid/counts with `python agents/graph.py`.
-The editable mermaid source is below.
+mermaid.ink at `--width` px, default 2400; needs internet — falls back to LangGraph's
+default-res `draw_mermaid_png()` if offline). Print the raw mermaid/counts with
+`python agents/graph.py`. The editable mermaid source is below.
 
 ```mermaid
 flowchart TD
