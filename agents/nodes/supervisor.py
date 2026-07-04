@@ -1,9 +1,9 @@
 """
 supervisor.py — Supervisor Agent node: intent router.
 
-Classifies the (already-guarded) user turn into one of four routes and writes it
+Classifies the (already-guarded) user turn into one of five routes and writes it
 to state["intent"]. No tools. The graph uses `intent` to branch:
-    troubleshoot -> Intake · analytics -> Analytics ·
+    troubleshoot -> Intake · advice -> Advice · analytics -> Analytics ·
     manage_incident -> Manage-Incident handler · general -> Output.
 
 LLM: Groq Llama 3.3 70B (reasoner).
@@ -57,6 +57,8 @@ def supervisor_node(state: dict) -> dict:
 if __name__ == "__main__":
     cases = [
         ("M01's bed won't heat to target",        "troubleshoot"),
+        ("How do I prevent nozzle clogs?",         "advice"),
+        ("Is it normal for the bed to heat up fast?", "advice"),  # ambiguous fault -> advice (it confirms)
         ("How many incidents are still open?",    "analytics"),
         ("Mark incident inc_26 complete",         "manage_incident"),
         ("Assign a technician to inc_30",          "manage_incident"),
