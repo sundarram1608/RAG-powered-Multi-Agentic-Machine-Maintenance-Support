@@ -408,8 +408,14 @@ logic is unchanged.
 ### 2. Topology
 Compiled graph — **17 nodes** (15 agent-nodes — 13 agents, with Analytics and Manage each spanning 2 nodes — + start/end), **32 edges**. Conditional
 edges are labelled with their routing condition; unlabelled edges are
-unconditional. The four amber nodes pause for the user (LangGraph `interrupt()`).
-Regenerate the raw export any time with `python agents/graph.py`.
+unconditional. The five interrupting nodes pause for the user (LangGraph `interrupt()`).
+
+![Compiled LangGraph workflow — 17 nodes / 32 edges](graph.png)
+
+The PNG above is LangGraph's own render (`app_graph.get_graph().draw_mermaid_png()`).
+Regenerate it with `python agents/graph.py --png` (writes `agents/graph.png` via
+mermaid.ink; needs internet), or print the raw mermaid/counts with `python agents/graph.py`.
+The editable mermaid source is below.
 
 ```mermaid
 flowchart TD

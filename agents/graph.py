@@ -249,8 +249,24 @@ def build_graph() -> StateGraph:
 app_graph = build_graph().compile(checkpointer=MemorySaver())
 
 
-# === SMOKE — python agents/graph.py  (compiles + prints the mermaid diagram) ===
+# === SMOKE / RENDER ===
+#   python agents/graph.py           -> print node/edge counts + the mermaid source
+#   python agents/graph.py --png     -> render agents/graph.png (via mermaid.ink; needs internet)
+#   python agents/graph.py --png X.png  -> render to a custom path
 if __name__ == "__main__":
+    import argparse
+
+    default_png = str(Path(__file__).resolve().parent / "graph.png")  # agents/graph.png
+    parser = argparse.ArgumentParser(description="Compile the LangGraph workflow; print or render it.")
+    parser.add_argument("--png", nargs="?", const=default_png, metavar="PATH",
+                        help="render the graph to a PNG (default: agents/graph.png) "
+                             "via mermaid.ink — needs internet")
+    args = parser.parse_args()
+
     g = app_graph.get_graph()
     print(f"Compiled: {len(g.nodes)} nodes, {len(g.edges)} edges\n")
-    print(g.draw_mermaid())
+    if args.png:
+        g.draw_mermaid_png(output_file_path=args.png)
+        print(f"Wrote {args.png}")
+    else:
+        print(g.draw_mermaid())
