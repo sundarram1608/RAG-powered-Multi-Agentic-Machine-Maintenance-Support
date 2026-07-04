@@ -249,13 +249,13 @@ def build_graph() -> StateGraph:
 app_graph = build_graph().compile(checkpointer=MemorySaver())
 
 
-def render_png(graph, path: str, width: int = 2400) -> str:
+def render_png(graph, path: str, width: int = 3200) -> str:
     """Render the graph to a HIGH-RES PNG via mermaid.ink.
 
     LangGraph's built-in draw_mermaid_png() renders at ~950px (blurry when zoomed).
     mermaid.ink honours a `width` query param (scale is ignored / 503s past a pixel
     cap), so we hit its API directly with the same base64 encoding LangChain uses,
-    at `width` px (default 2400 -> ~2400x2850, crisp). Falls back to the built-in
+    at `width` px (default 3200 -> ~3200x3800, crisp on zoom). Falls back to the built-in
     default-res render if the API is unreachable. Returns "hd" or "default".
     """
     import base64
@@ -282,7 +282,7 @@ def render_png(graph, path: str, width: int = 2400) -> str:
 #   python agents/graph.py                -> print node/edge counts + the mermaid source
 #   python agents/graph.py --png          -> render HD agents/graph.png (via mermaid.ink)
 #   python agents/graph.py --png X.png    -> render to a custom path
-#   python agents/graph.py --png --width 3200  -> even higher resolution
+#   python agents/graph.py --png --width 4000  -> even higher resolution (default 3200)
 if __name__ == "__main__":
     import argparse
 
@@ -291,8 +291,8 @@ if __name__ == "__main__":
     parser.add_argument("--png", nargs="?", const=default_png, metavar="PATH",
                         help="render the graph to a HD PNG (default: agents/graph.png) "
                              "via mermaid.ink — needs internet")
-    parser.add_argument("--width", type=int, default=2400,
-                        help="PNG width in px (default 2400; higher = sharper/larger)")
+    parser.add_argument("--width", type=int, default=3200,
+                        help="PNG width in px (default 3200; higher = sharper/larger)")
     args = parser.parse_args()
 
     g = app_graph.get_graph()
