@@ -3,8 +3,14 @@ Output Agent — system prompt (the single voice).
 
 Grounding = Option A: the FACT-heavy paths (confirmations, self-fix guide) are
 rendered by TEMPLATES in the node (exact, from state) — the LLM is used ONLY for
-the two genuinely generative modes: `general` (capability/greeting) and `analytics`
-(summarize query rows). This prompt covers those two modes.
+the three genuinely generative modes: `general` (capability/greeting), `analytics`
+(summarize query rows), and `advice` (grounded guidance). This prompt covers those
+three modes ONLY.
+
+NOTE: the other user-facing replies (troubleshoot self-fix / technician dispatch,
+manage_incident confirmations, refusals, clarify give-ups, errors) are NOT prompt
+modes — they are built deterministically in `nodes/output.py` (see `_self_resolved`,
+`_technician`, `_manage`), so ids/dates/counts can't be hallucinated.
 
 Changelog:
   v1.0.0 — initial: general + analytics rendering, strict exact-quoting for numbers.
