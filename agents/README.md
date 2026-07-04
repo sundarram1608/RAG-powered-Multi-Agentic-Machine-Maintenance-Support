@@ -412,6 +412,8 @@ unconditional. The five interrupting nodes pause for the user (LangGraph `interr
 
 ![Compiled LangGraph workflow — 17 nodes / 32 edges](graph.png)
 
+> *LangGraph's native render colours every node the same — it can't mark the interrupt nodes, because `interrupt()` is called inside a node's body at runtime, not part of the graph's static structure. For which nodes pause, see the **amber** nodes in the mermaid diagram below (or the Interrupts table in §4).*
+
 The PNG above is LangGraph's own render (`app_graph.get_graph().draw_mermaid_png()`).
 Regenerate it with `python agents/graph.py --png` (writes `agents/graph.png` via
 mermaid.ink; needs internet), or print the raw mermaid/counts with `python agents/graph.py`.
