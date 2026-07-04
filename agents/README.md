@@ -24,21 +24,21 @@ This layer is the **brain** of the system. A multi-agent workflow built with **L
 ## The agents & workflow
 
 
-| #   | Agent                    | LLM        | Tools                                                                                                                                                | Role                                                                                                                                                        |
-| --- | ------------------------ | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **Input**                | Llama      | —                                                                                                                                                    | scope + prompt-injection / PII-request guard                                                                                                                |
-| 2   | **Supervisor**           | Llama      | —                                                                                                                                                    | route: troubleshoot / advice / analytics / manage_incident / general                                                                                        |
-| 3   | **Advice**               | Llama      | `list_machine_versions`, `user_manual_retrieval`, `safety_retrieval`                                                                                 | general/preventive/how-to questions: answer (grounded in every model's manual + safety, machine-agnostic) · ask "facing it now?" · hand off to troubleshoot |
-| 4   | **Analytics**            | Llama      | `run_readonly_query`                                                                                                                                 | coder: NL → read-only SQL; executor: run approved SQL                                                                                                       |
-| 5   | **Text-to-SQL Reviewer** | **Gemini** | —                                                                                                                                                    | judge the SQL: grounded / relevant / safe; loop back if not                                                                                                 |
-| 6   | **Manage Incident**      | Llama      | `get_incident`, `list_incidents`, `list_available_technicians`, `find_available_technician`, `book_technician_slot`, `update_incident`, `send_email` | direct action on a KNOWN incident (close, assign/reassign, update)                                                                                          |
-| 7   | **Intake**               | Llama      | `get_machine`                                                                                                                                        | resolve & validate machine; clarify if needed                                                                                                               |
-| 8   | **Diagnosis**            | Llama      | RAG + DB read tools                                                                                                                                  | gather evidence (corrective-RAG) → root cause + fix                                                                                                         |
-| 9   | **Verifier**             | **Gemini** | —                                                                                                                                                    | judge groundedness/relevance/safety; loop back if weak                                                                                                      |
-| 10  | **Decider**              | Llama      | —                                                                                                                                                    | ask the user: self-fix or technician?                                                                                                                       |
-| 11  | **Self Action**          | — *(mechanical, no LLM)* | `create_incident`, `update_incident`                                                                                                   | present the already-verified guidance; on "complete" log a self-resolved incident (reuses the Diagnosis' fix + safety — no re-retrieval)                     |
-| 12  | **Technician Action**    | — *(mechanical, no LLM)* | `find_available_technician`, `create_incident`, `book_technician_slot`, `update_incident`, `send_email`                                | book a technician/supervisor, update tables, notify                                                                                                         |
-| 13  | **Output**               | Llama      | —                                                                                                                                                    | compose ALL final replies (+ mid-flow asks via interrupt); final PII scrub                                                                                  |
+| #   | Agent                    | LLM                | Tools                                                                                                                                                | Role                                                                                                                                                        |
+| --- | ------------------------ | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Input**                | Groq Llama 3.3 70B | —                                                                                                                                                    | scope + prompt-injection / PII-request guard                                                                                                                |
+| 2   | **Supervisor**           | Groq Llama 3.3 70B | —                                                                                                                                                    | route: troubleshoot / advice / analytics / manage_incident / general                                                                                        |
+| 3   | **Advice**               | Groq Llama 3.3 70B | `list_machine_versions`, `user_manual_retrieval`, `safety_retrieval`                                                                                 | general/preventive/how-to questions: answer (grounded in every model's manual + safety, machine-agnostic) · ask "facing it now?" · hand off to troubleshoot |
+| 4   | **Analytics**            | Groq Llama 3.3 70B | `run_readonly_query`                                                                                                                                 | coder: NL → read-only SQL; executor: run approved SQL                                                                                                       |
+| 5   | **Text-to-SQL Reviewer** | **Gemini**         | —                                                                                                                                                    | judge the SQL: grounded / relevant / safe; loop back if not                                                                                                 |
+| 6   | **Manage Incident**      | Groq Llama 3.3 70B | `get_incident`, `list_incidents`, `list_available_technicians`, `find_available_technician`, `book_technician_slot`, `update_incident`, `send_email` | direct action on a KNOWN incident (close, assign/reassign, update)                                                                                          |
+| 7   | **Intake**               | Groq Llama 3.3 70B | `get_machine`                                                                                                                                        | resolve & validate machine; clarify if needed                                                                                                               |
+| 8   | **Diagnosis**            | Groq Llama 3.3 70B | RAG + DB read tools                                                                                                                                  | gather evidence (corrective-RAG) → root cause + fix                                                                                                         |
+| 9   | **Verifier**             | **Gemini**         | —                                                                                                                                                    | judge groundedness/relevance/safety; loop back if weak                                                                                                      |
+| 10  | **Decider**              | Groq Llama 3.3 70B | —                                                                                                                                                    | ask the user: self-fix or technician?                                                                                                                       |
+| 11  | **Self Action**          | — *no LLM*         | `create_incident`, `update_incident`                                                                                                                 | present the already-verified guidance; on "complete" log a self-resolved incident (reuses the Diagnosis' fix + safety — no re-retrieval)                    |
+| 12  | **Technician Action**    | — *no LLM*         | `find_available_technician`, `create_incident`, `book_technician_slot`, `update_incident`, `send_email`                                              | book a technician/supervisor, update tables, notify                                                                                                         |
+| 13  | **Output**               | Groq Llama 3.3 70B | —                                                                                                                                                    | compose ALL final replies (+ mid-flow asks via interrupt); final PII scrub                                                                                  |
 
 
 **Flow (narrative):** user turn → **Input** (scope/safety) → **Supervisor** routes →
@@ -69,11 +69,7 @@ resume_turn(thread_id, value)           -> Result   # answer a clarification / a
 stream_turn(...) / stream_resume(...)   -> async-gen of {type:"decision"|"tool"|"token"} … {type:"result",**Result}
 ```
 
-The `stream_*` variants (Phase 6b) run `astream(stream_mode=["updates","messages","custom"])`
-and emit a live activity feed — `decision` lines (per-agent summaries from `updates`),
-`tool` lines (nodes' MCP calls via `streaming.emit_tool`, on the `custom` stream), and
-`token` events (the Output node's answer, streamed) — then the same final `Result`.
-`start_turn`/`resume_turn` (one-shot `ainvoke`) remain for non-streaming callers.
+The `stream_*` variants run `astream(stream_mode=["updates","messages","custom"])` and emit a live activity feed — `decision` lines (per-agent summaries from `updates`), `tool` lines (nodes' MCP calls via `streaming.emit_tool`, on the `custom` stream), and `token` events (the Output node's answer, streamed) — then the same final `Result`. `start_turn`/`resume_turn` (one-shot `ainvoke`) remain for non-streaming callers.
 
 - `thread_id` = one chat (memory + pause/resume via the checkpointer).
 - `user_id` = the logged-in operator's `employee_id` (drives `create_incident(reported_by=…)` and notifications — set from login, never asked in chat).
@@ -84,8 +80,7 @@ and emit a live activity feed — `decision` lines (per-agent summaries from `up
 
 ## Memory & threads
 
-- **Within a thread:** after each step LangGraph **checkpoints** the full `State`
-keyed by `thread_id`; the next turn reloads it → the conversation continues.
+- **Within a thread:** after each step LangGraph **checkpoints** the full `State` keyed by `thread_id`; the next turn reloads it → the conversation continues.
 - **Conversation history (**`messages`**):** the user turn is appended at the start of a
 request (`api.start_turn`) and the assistant's final reply at the end
 (`output_node`); both via the `add_messages` reducer. `history.format_recent(...)`
@@ -94,7 +89,7 @@ coder can resolve brief follow-ups ("which are mine?", "what about the closed
 ones?") that are meaningless in isolation. The structured state is still the
 primary working memory — this is a bounded window, not the whole transcript.
 - **Across threads:** isolated — a new chat is a new `thread_id` with fresh state
-(no sharing). *(Optional cross-thread long-term memory via a Store is not used.)*
+(no sharing).
 - **Long chats (e.g. 80 turns):** there is no fixed "thread token limit" — the
 checkpointer persists everything; the constraint is the **LLM context window**
 per call (Llama ≈128K, Gemini ≈1M). We keep calls small by (1) reading typed
@@ -114,62 +109,32 @@ per call (Llama ≈128K, Gemini ≈1M). We keep calls small by (1) reading typed
 | Embeddings (RAG)         | **BGE-M3 (local)**        | free, no rate limits, deterministic                                                     |
 
 
-> These are the only models the **live agent** uses (Groq + Google). The offline
-> **eval judge** is separate — it lives in `[eval/](../eval/)` on **OpenRouter**
-> (`EVAL_JUDGE_MODEL`, e.g. Qwen-3) so grading never competes with the agent's quota
-> and stays an independent opinion. The agent never calls OpenRouter.
+> - These are the only models the **live agent** uses (Groq + Google). 
+> - The offline **eval judge** is separate — it lives in `[eval/](../eval/)` on **OpenRouter* (`EVAL_JUDGE_MODEL`, e.g. Qwen-3) so grading never competes with the agent's quota and stays an independent opinion. The agent never calls OpenRouter.
 
-Switching providers is a one-line change in `llms.py`. Keys: `GROQ_API_KEY`,
-`GOOGLE_API_KEY` in `.env` (both free); optional `GROQ_API_KEY_2` / `GOOGLE_API_KEY_2`
-add per-provider backup keys (see Resilience).
 
-**Resilience (free-tier reality).** Three layers, innermost first:
+**Resilience (free-tier reality)** 
 
-1. **Retries** — `max_retries` rides out a *transient* `503`/`429` with exponential
-  backoff, kept LOW so a hard daily-cap doesn't turn into long backoff waits (5 retries
-   ≈ 15s/key of pointless waiting on a cap that won't clear). The **reasoner** uses
-   `LLM_MAX_RETRIES` (2); the **whole judge chain** (Gemini *and* its Qwen-on-Groq
-   fallback) uses `JUDGE_MAX_RETRIES` (1). Every candidate/key has the next as a backup
-   (layer 2), so each fails FAST and advances rather than hanging on retries — which is
-   what made the Intake/Verifier steps drag when both providers were throttled.
-2. **Backup key (optional)** — if `GROQ_API_KEY_2` / `GOOGLE_API_KEY_2` is set, the
-  factories build a `_QuotaFailover` chain (`get_reasoner`, `get_judge`,
-   `get_judge_structured`): when the primary returns a **transient** error
-   (`config.is_transient_error` — rate-limit / quota / capacity, or a connection /
-   timeout blip), the next candidate is tried. It does **not** fail over on
-   request/validation bugs (those surface immediately). With no secondary key set, the
-   factory returns the bare model — identical to before. *(The "free-tier limit"
-   message in* `api.py` *uses the narrower* `is_rate_limit_error`*, so a timeout isn't
-   mislabeled as a cap.)*
-   *(Groq's token cap is per-account, so a 2nd Groq key from the same account shares
-   that cap; real headroom needs a separate account.)*
-3. **Cross-family judge fallback** — `get_judge_structured()` keeps Gemini primary
-  but appends **Qwen-3 on Groq** to the chain, so a Gemini outage falls to a
-   different family (preserving the verifier's independence) rather than breaking the
-   run. Full order: Gemini key1 → key2 → Qwen-Groq key1 → key2 (whichever exist).
+Three layers, innermost first:
 
-Only when **every** configured key is exhausted does the error reach `api.py`, which
-shows the friendly "free-tier limit — resets at midnight" message.
+1. **Retries** — `max_retries` rides out a *transient* `503`/`429` errors with exponential backoff, kept LOW so a hard daily-cap doesn't turn into long backoff waits (5 retries ≈ 15s/key of pointless waiting on a cap that won't clear). The **reasoner** uses `LLM_MAX_RETRIES` (2); the **whole judge chain** (Gemini *and* its Qwen-on-Groq fallback) uses `JUDGE_MAX_RETRIES` (1). Every candidate/key has the next as a backup (layer 2), so each fails FAST and advances rather than hanging on retries — which is what made the Intake/Verifier steps drag when both providers were throttled.
 
-> Factory contract: keys are passed explicitly and bindings applied per key, so call
-> `get_reasoner(structured=Schema)` / `get_reasoner(tools=…)` rather than
-> `.with_structured_output(…)` / `.bind_tools(…)` on the returned object (those don't
-> exist on a failover wrapper).
+2. **Backup key (optional)** — if `GROQ_API_KEY_2` / `GOOGLE_API_KEY_2` is set, the factories build a `_QuotaFailover` chain (`get_reasoner`, `get_judge`, `get_judge_structured`): when the primary returns a **transient** error (`config.is_transient_error` — rate-limit / quota / capacity, or a connection / timeout blip), the next candidate is tried. It does **not** fail over on request/validation bugs (those surface immediately). With no secondary key set, the factory returns the bare model — identical to before. *(The "free-tier limit" message in* `api.py` *uses the narrower* `is_rate_limit_error`*, so a timeout isn't mislabeled as a cap.)* *(Groq's token cap is per-account, so a 2nd Groq key from the same account shares that cap; real headroom needs a separate account.)*
+
+3. **Cross-family judge fallback** — `get_judge_structured()` keeps Gemini primary but appends **Qwen-3 on Groq** to the chain, so a Gemini outage falls to a different family (preserving the verifier's independence) rather than breaking the run. Full order: Gemini key1 → key2 → Qwen-Groq key1 → key2 (whichever exist).
+
+Only when **every** configured key is exhausted does the error reach `api.py`, which shows the friendly "free-tier limit — resets at midnight" message.
 
 ---
 
-
-
 ## MCP connection & per-agent tool allow-list
 
-The agents connect to **both** MCP servers at once via
-`langchain-mcp-adapters`' `MultiServerMCPClient` (`mcp_client.py`):
+The agents connect to **both** MCP servers at once via `langchain-mcp-adapters`' `MultiServerMCPClient` (`mcp_client.py`):
 
 - **stdio** (`local_data`) — auto-spawned; the 15 read/RAG/write tools.
-- **streamable-HTTP** (`services`, `127.0.0.1:8000`) — separate process; `run_readonly_query`, `send_email`.
+- **streamable-HTTP** (`services`, `127.0.0.1:8000`) — separate process `run_readonly_query`, `send_email`.
 
-`get_all_tools()` returns the union (17 tools); `tools_for(agent, tools)` filters
-to each agent's allow-list (`config.AGENT_TOOLS`):
+`get_all_tools()` returns the union (17 tools); `tools_for(agent, tools)` filters to each agent's allow-list (`config.AGENT_TOOLS`):
 
 
 | Agent                                                                   | Tools                                                                                                                                                |
@@ -184,8 +149,7 @@ to each agent's allow-list (`config.AGENT_TOOLS`):
 | technician_action                                                       | `find_available_technician`, `create_incident`, `book_technician_slot`, `update_incident`, `send_email`                                              |
 
 
-**Launch order:** `python mcp_server/server.py http` (HTTP services server) → then
-run the agent (it auto-spawns the stdio server and connects to the HTTP one).
+**Launch order:** `python mcp_server/server.py http` (HTTP services server) → then run the agent (it auto-spawns the stdio server and connects to the HTTP one).
 
 ---
 
@@ -207,8 +171,7 @@ The plumbing every node stands on (no nodes yet):
 | `[utils/streaming.py](utils/streaming.py)` | `emit()`/`emit_tool()` — nodes surface tool calls / sub-steps onto the `astream(stream_mode="custom")` feed (no-op outside a streamed run) for the app's 6b live activity log                                                                                       |
 
 
-**Milestone test** (`python agents/mcp_client.py`, under a clearly-marked
-`MILESTONE TEST` header):
+**Milestone test** (`python agents/mcp_client.py`, under a clearly-marked `MILESTONE TEST` header):
 
 - **Part 1 (no API key):** connect to both servers, list the 17 tools, print each agent's resolved allow-list.
 - **Part 2 (needs** `GROQ_API_KEY`**):** bind `tools_for("intake")` to the reasoner and confirm it emits a `get_machine` tool call.
@@ -216,26 +179,18 @@ The plumbing every node stands on (no nodes yet):
 ---
 
 
+## Agents (Phase 4b)
 
-## Agents (filled in as each is built — Phase 4b)
-
-> Build order: Input → Supervisor → Analytics → **Text-to-SQL Reviewer** →
-> Manage Incident → Intake → Diagnosis → Verifier → Decider → Self Action →
-> Technician Action → Output.
-> Prompts are versioned in `prompts/<agent>.py` (a `VERSION` + changelog header);
-> each run is tagged with the `prompt_version` it used. Prompt text is not
-> reproduced here.
+> Build order: Input → Supervisor → Analytics → Text-to-SQL Reviewer → Manage Incident → Advice → Intake → Diagnosis → Verifier → Decider → Self Action → Technician Action → Output.
+> Prompts are versioned in `prompts/<agent>.py` (a `VERSION` + changelog header); each run is tagged with the `prompt_version` it used. Prompt text is not reproduced here.
 >
-> **Every node** reads/writes the shared `State` and (for reasoning nodes) returns
-> a **Pydantic** model via `llm.with_structured_output(Model)` — so each subsection
-> states the **input format** (state keys read) and **output format** (the Pydantic
-> model + state keys written).
+> **Every node** reads/writes the shared `State` and (for reasoning nodes) returns a **Pydantic** model via `llm.with_structured_output(Model)` — so each subsection states the **input format** (state keys read) and **output format** (the Pydantic model + state keys written).
 
 
 
 ### 1. Input Agent — `nodes/input.py`  ✅
 
-- **Purpose:** the front gate — classify each user turn as **in-scope** (FDM maintenance/service/faults, analytics, capabilities, or operational incident/booking actions) **and safe** (no prompt-injection, no PII/credential extraction). Pure classifier; it never answers or acts.
+- **Purpose:** the front gate — classify each user turn as **in-scope** (FDM maintenance/ service/ faults, analytics, capabilities, or operational incident/ booking actions) **and safe** (no prompt-injection, no PII/credential extraction). Pure classifier; it never answers or acts.
 - **LLM:** **Groq Llama 3.3 70B** (reasoner), `with_structured_output(GuardResult)`.
 - **Tools:** none.
 - **Input:** the current user turn (`state.user_input`, else the last message) + the recent `messages` window (last 5 exchanges) so a brief follow-up is judged in context.
@@ -408,20 +363,21 @@ The plumbing every node stands on (no nodes yet):
 ### 13. Output Agent — `nodes/output.py`  ✅
 
 - **Purpose:** the single voice — compose the **final user-facing reply** for every terminal path, then a final **PII scrub**.
-- **Grounding (Option A):** fact-heavy paths are rendered by **templates** in the node (ids/names/dates/counts verbatim from state — cannot be hallucinated); the **LLM** is used ONLY for `general` and `analytics`. LLM: Groq Llama 3.3 70B. **Tools:** none.
+- **Grounding (Option A):** fact-heavy paths are rendered by **templates** in the node (ids/names/dates/counts verbatim from state — cannot be hallucinated); the **LLM** is used ONLY for `general`, `analytics`, and `advice`. LLM: Groq Llama 3.3 70B. **Tools:** none.
 - **Per-path rendering** (what produces each reply, and where):
 
   | Path                      | Rendered by                    | Where                                                                                                                                                                                                                   |
   | ------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
   | general                   | **LLM**                        | `OUTPUT_SYSTEM` (MODE = general)                                                                                                                                                                                        |
   | analytics                 | **LLM** (exact number quoting) | `OUTPUT_SYSTEM` (MODE = analytics)                                                                                                                                                                                      |
+  | advice                    | **LLM** (grounded, all models) | `OUTPUT_SYSTEM` (MODE = advice) — shared answer + per-model deltas from safety + every model's manual |
   | refusal                   | template                       | `output_node` → relays `guard_reason`                                                                                                                                                                                   |
   | troubleshoot / self       | template                       | `output_node._self_resolved()` — **answers** ("Yes, you can fix this yourself") + **reasoning** (the diagnosis root cause) + numbered steps + safety, then the **action** ("logged & closed as inc_X")                  |
   | troubleshoot / technician | template                       | `output_node._technician()` — **answers** ("No, not a self-fix") + **reasoning** (root cause + any part needed / verifier-exhaustion) + the **action** ("logged inc_X; {role} {emp} for {date/slot}"; notes escalation) |
   | no_assignee               | template                       | `output_node` (inline)                                                                                                                                                                                                  |
   | manage_incident           | template                       | `output_node._manage()`                                                                                                                                                                                                 |
 
-  > Note: `OUTPUT_SYSTEM` (`prompts/output.py`) deliberately covers **only** the two LLM modes (general + analytics) — under Option A the templated paths above are produced in code, not by the prompt.
+  > Note: `OUTPUT_SYSTEM` (`prompts/output.py`) deliberately covers **only** the three LLM modes (general + analytics + advice) — under Option A the templated paths above are produced in code, not by the prompt.
 - **Input format** (state read): `intent`, `input_safe`, `guard_reason`, `user_input`, `diagnosis`, `action_result`, `manage_plan`, `sql_result`, `verifier_exhausted`, `clarify_abandoned` (+ its pre-composed `final_response`, passed straight through when a clarify loop bailed/gave up), and (advice mode) `advice_topic` + `retrieved_context`. **Output format:** `final_response` (str, PII-scrubbed); tags `prompt_versions["output"]`.
 - **PII scrub:** regex strips any email / 7+-digit phone from the final text (belt-and-suspenders; tools already keep PII out of state).
 - **Verifier exhaustion:** routed to Technician Action (auto-dispatch); Output states a technician will assess it (no apologetic caveat).
