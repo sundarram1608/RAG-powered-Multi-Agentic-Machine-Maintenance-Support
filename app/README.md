@@ -5,8 +5,6 @@ agent boundary (`agents/api.py`) — it never touches the graph or tools directl
 one exception is `backend.list_operators()`, a read-only `SELECT` on employees to
 populate the login dropdown; the agent path itself is untouched).
 
-> Status: **6a ✅** text chat + login + interrupts · **6b ✅** live activity feed + streamed
-> answer · **6c ✅** 👍/👎 feedback → LangSmith. (Image/vision input removed.)
 
 ## Run
 The HTTP MCP server must be up (the stdio tools server auto-spawns):

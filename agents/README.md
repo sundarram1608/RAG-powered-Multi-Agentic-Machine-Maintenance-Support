@@ -112,20 +112,19 @@ per call (Llama ≈128K, Gemini ≈1M). We keep calls small by (1) reading typed
 > - These are the only models the **live agent** uses (Groq + Google). 
 > - The offline **eval judge** is separate — it lives in `[eval/](../eval/)` on **OpenRouter* (`EVAL_JUDGE_MODEL`, e.g. Qwen-3) so grading never competes with the agent's quota and stays an independent opinion. The agent never calls OpenRouter.
 
-
 **Resilience (free-tier reality)** 
 
 Three layers, innermost first:
 
 1. **Retries** — `max_retries` rides out a *transient* `503`/`429` errors with exponential backoff, kept LOW so a hard daily-cap doesn't turn into long backoff waits (5 retries ≈ 15s/key of pointless waiting on a cap that won't clear). The **reasoner** uses `LLM_MAX_RETRIES` (2); the **whole judge chain** (Gemini *and* its Qwen-on-Groq fallback) uses `JUDGE_MAX_RETRIES` (1). Every candidate/key has the next as a backup (layer 2), so each fails FAST and advances rather than hanging on retries — which is what made the Intake/Verifier steps drag when both providers were throttled.
-
 2. **Backup key (optional)** — if `GROQ_API_KEY_2` / `GOOGLE_API_KEY_2` is set, the factories build a `_QuotaFailover` chain (`get_reasoner`, `get_judge`, `get_judge_structured`): when the primary returns a **transient** error (`config.is_transient_error` — rate-limit / quota / capacity, or a connection / timeout blip), the next candidate is tried. It does **not** fail over on request/validation bugs (those surface immediately). With no secondary key set, the factory returns the bare model — identical to before. *(The "free-tier limit" message in* `api.py` *uses the narrower* `is_rate_limit_error`*, so a timeout isn't mislabeled as a cap.)* *(Groq's token cap is per-account, so a 2nd Groq key from the same account shares that cap; real headroom needs a separate account.)*
-
 3. **Cross-family judge fallback** — `get_judge_structured()` keeps Gemini primary but appends **Qwen-3 on Groq** to the chain, so a Gemini outage falls to a different family (preserving the verifier's independence) rather than breaking the run. Full order: Gemini key1 → key2 → Qwen-Groq key1 → key2 (whichever exist).
 
 Only when **every** configured key is exhausted does the error reach `api.py`, which shows the friendly "free-tier limit — resets at midnight" message.
 
 ---
+
+
 
 ## MCP connection & per-agent tool allow-list
 
@@ -177,6 +176,7 @@ The plumbing every node stands on (no nodes yet):
 - **Part 2 (needs** `GROQ_API_KEY`**):** bind `tools_for("intake")` to the reasoner and confirm it emits a `get_machine` tool call.
 
 ---
+
 
 
 ## Agents (Phase 4b)
@@ -366,18 +366,18 @@ The plumbing every node stands on (no nodes yet):
 - **Grounding (Option A):** fact-heavy paths are rendered by **templates** in the node (ids/names/dates/counts verbatim from state — cannot be hallucinated); the **LLM** is used ONLY for `general`, `analytics`, and `advice`. LLM: Groq Llama 3.3 70B. **Tools:** none.
 - **Per-path rendering** (what produces each reply, and where):
 
-  | Path                      | Rendered by                    | Where                                                                                                                                                                                                                   |
-  | ------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-  | general                   | **LLM**                        | `OUTPUT_SYSTEM` (MODE = general)                                                                                                                                                                                        |
-  | analytics                 | **LLM** (exact number quoting) | `OUTPUT_SYSTEM` (MODE = analytics)                                                                                                                                                                                      |
-  | advice                    | **LLM** (grounded, all models) | `OUTPUT_SYSTEM` (MODE = advice) — shared answer + per-model deltas from safety + every model's manual |
-  | clarify give-up (`clarify_abandoned`) | template          | `output_node` → relays the pre-composed `final_response` (bail / re-ask cap hit) |
-  | refusal                   | template                       | `output_node` → relays `guard_reason`                                                                                                                                                                                   |
-  | troubleshoot / self       | template                       | `output_node._self_resolved()` — **answers** ("Yes, you can fix this yourself") + **reasoning** (the diagnosis root cause) + numbered steps + safety, then the **action** ("logged & closed as inc_X")                  |
-  | troubleshoot / technician | template                       | `output_node._technician()` — **answers** ("No, not a self-fix") + **reasoning** (root cause + any part needed / verifier-exhaustion) + the **action** ("logged inc_X; {role} {emp} for {date/slot}"; notes escalation) |
-  | no_assignee               | template                       | `output_node` (inline)                                                                                                                                                                                                  |
-  | manage_incident           | template                       | `output_node._manage()`                                                                                                                                                                                                 |
-  | error                     | template                       | `output_node` (inline) — generic apology when a write/action failed |
+  | Path                                  | Rendered by                    | Where                                                                                                                                                                                                                   |
+  | ------------------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | general                               | **LLM**                        | `OUTPUT_SYSTEM` (MODE = general)                                                                                                                                                                                        |
+  | analytics                             | **LLM** (exact number quoting) | `OUTPUT_SYSTEM` (MODE = analytics)                                                                                                                                                                                      |
+  | advice                                | **LLM** (grounded, all models) | `OUTPUT_SYSTEM` (MODE = advice) — shared answer + per-model deltas from safety + every model's manual                                                                                                                   |
+  | clarify give-up (`clarify_abandoned`) | template                       | `output_node` → relays the pre-composed `final_response` (bail / re-ask cap hit)                                                                                                                                        |
+  | refusal                               | template                       | `output_node` → relays `guard_reason`                                                                                                                                                                                   |
+  | troubleshoot / self                   | template                       | `output_node._self_resolved()` — **answers** ("Yes, you can fix this yourself") + **reasoning** (the diagnosis root cause) + numbered steps + safety, then the **action** ("logged & closed as inc_X")                  |
+  | troubleshoot / technician             | template                       | `output_node._technician()` — **answers** ("No, not a self-fix") + **reasoning** (root cause + any part needed / verifier-exhaustion) + the **action** ("logged inc_X; {role} {emp} for {date/slot}"; notes escalation) |
+  | no_assignee                           | template                       | `output_node` (inline)                                                                                                                                                                                                  |
+  | manage_incident                       | template                       | `output_node._manage()`                                                                                                                                                                                                 |
+  | error                                 | template                       | `output_node` (inline) — generic apology when a write/action failed                                                                                                                                                     |
 
   > Note: `OUTPUT_SYSTEM` (`prompts/output.py`) deliberately covers **only** the three LLM modes (general + analytics + advice) — under Option A the templated paths above are produced in code, not by the prompt.
 - **Input format** (state read): `intent`, `input_safe`, `guard_reason`, `user_input`, `diagnosis`, `action_result`, `manage_plan`, `sql_result`, `verifier_exhausted`, `clarify_abandoned` (+ its pre-composed `final_response`, passed straight through when a clarify loop bailed/gave up), and (advice mode) `advice_topic` + `retrieved_context`. **Output format:** `final_response` (str, PII-scrubbed); tags `prompt_versions["output"]`.
