@@ -163,7 +163,7 @@ Full guide → `[mcp_server/README.md](mcp_server/README.md)`
 **13 specialized agents** are wired into one **LangGraph** `StateGraph` (15 nodes),
 compiled with a `MemorySaver` checkpointer. Whenever a user asks something to the AI Assistant, the Input guard screens every turn; the **Supervisor** routes to one of five sub-flows:
 
-> **On the word "agent":** this is a **workflow with agentic decision points**, not one autonomous agent. The control flow is the graph (deterministic edges); the LLM decides only where a real choice exists (routing, diagnosis, verification, self-vs-technician). We use "agent" in the **single-responsibility** sense — a named node with one job — so **11 of the 13 reason with an LLM** and **2 (Self / Technician Action) are purely mechanical** executors of a decision made upstream.
+> This is a **workflow with multi agentic decision points**, not one autonomous agent. The control flow is the graph (deterministic edges); the LLM decides where a real choice exists (routing, diagnosis, verification, self-vs-technician).
 
 - **troubleshoot** — Intake (resolve machine + symptom) → Diagnosis (RAG manual/safety + DB facts, corrective-RAG) → Verifier (independent RAG-triad + safety judge) → the `needs_technician` gate → **Self Action** (operator self-fix) / **Technician Action** (book + notify) / Decider.
 - **advice** — the **Advice** agent answers general/preventive/how-to questions ("what to do if the bed heats rapidly?") with **no machine or incident**. Staying machine-agnostic, it grounds the answer in the **safety guide + every model's manual** (`list_machine_versions` → per-model `user_manual_retrieval` + `safety_retrieval`), and the Output agent writes **one shared answer plus per-model deltas** (falling back to a single answer when the models don't differ). If it's unclear whether the user is facing the fault now or just asking, it asks — and if they *are* facing it, it hands off to troubleshoot (which is where an incident can then be opened/booked).
@@ -176,15 +176,18 @@ fact-bearing replies from templates (no hallucinated ids/counts) and a final PII
 scrub. **Human-in-the-loop** pauses (clarifications, the self/technician decision,
 the two-button self-fix, manage approval) use LangGraph `interrupt()` / resume.
 
-**Models (all free-tier):** 
+**Models — 4 distinct LLMs (all free-tier) + 2 local RAG models:**
 
-- Groq **Llama 3.3 70B** (reasoning / tool-calling),
-- **Gemini 2.5 Flash-Lite** (independent judge) with a **Qwen-3 32B on Groq** fallback
-when Gemini is unavailable, 
-- **BGE-M3** (local embeddings) + reranker.
+| # | LLM | Provider | Role | Used at |
+|---|---|---|---|---|
+| 1 | **Llama 3.3 70B** (`llama-3.3-70b-versatile`) | Groq | reasoning / tool-calling | runtime **and** eval\* |
+| 2 | **Gemini 2.5 Flash-Lite** | Google | independent judge — Verifier + Text-to-SQL Reviewer | runtime **and** eval\* |
+| 3 | **Qwen-3 32B** (`qwen/qwen3-32b`) | Groq | judge **fallback** (when Gemini is unavailable) | runtime |
+| 4 | **Qwen-3-next 80B** (`qwen/qwen3-next-80b-a3b-instruct:free`) | **OpenRouter** | **eval judge** (faithfulness / answer-relevance) | eval only |
 
-Both LLMs use retry/backoff. 
-Needs `GROQ_API_KEY` + `GOOGLE_API_KEY` in `.env`.
+<sub>\* Evaluation runs the **real agent**, so its reasoning/verifier are #1/#2 **reused** — eval adds only its own judge (#4), a **third family/provider** so the grader isn't grading itself. Retrieval also uses **2 non-LLM** local models: **BGE-M3** (embeddings) + **bge-reranker-v2-m3** (reranker) — free, deterministic, no rate limits.</sub>
+
+The API LLMs use retry/backoff (+ a same-family failover, #2→#3). Needs `GROQ_API_KEY` + `GOOGLE_API_KEY` in `.env` (+ `OPENROUTER_API_KEY` for the eval judge).
 
 ```bash
 # start the HTTP services server first (separate terminal)
