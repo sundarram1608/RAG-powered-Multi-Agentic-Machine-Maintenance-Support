@@ -185,7 +185,7 @@ the two-button self-fix, manage approval) use LangGraph `interrupt()` / resume.
 | 3 | **Qwen-3 32B** (`qwen/qwen3-32b`) | Groq | judge **fallback** (when Gemini is unavailable) | runtime |
 | 4 | **Qwen-3-next 80B** (`qwen/qwen3-next-80b-a3b-instruct:free`) | **OpenRouter** | **eval judge** (faithfulness / answer-relevance) | eval only |
 
-<sub>\* Evaluation runs the **real agent**, so its reasoning/verifier are #1/#2 **reused** — eval adds only its own judge (#4), a **third family/provider** so the grader isn't grading itself. Retrieval also uses **2 non-LLM** local models: **BGE-M3** (embeddings) + **bge-reranker-v2-m3** (reranker) — free, deterministic, no rate limits.</sub>
+<sub>\* Evaluation runs the **real agent nodes**, so #1 is reused across most targets and #2 is reused by the **SQL-reviewer** in the `sql_cases` target (the only eval target that uses Gemini; the troubleshoot target runs `diagnosis_node` only, not the Verifier). Eval adds only its own judge (#4), a **third family/provider** so the grader isn't grading itself. Retrieval also uses **2 non-LLM** local models: **BGE-M3** (embeddings) + **bge-reranker-v2-m3** (reranker) — free, deterministic, no rate limits.</sub>
 
 The API LLMs use retry/backoff (+ a same-family failover, #2→#3). Needs `GROQ_API_KEY` + `GOOGLE_API_KEY` in `.env` (+ `OPENROUTER_API_KEY` for the eval judge).
 

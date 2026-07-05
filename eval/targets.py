@@ -4,9 +4,12 @@ measures, returning a plain dict the evaluators read. These CALL the existing no
 (no runtime changes). Used by run_eval.py via langsmith.aevaluate.
 
 Server/quota needs:
-  troubleshoot, manage -> HTTP MCP server up (RAG/DB tools), Groq + Gemini
+  troubleshoot, manage -> HTTP MCP server up (RAG/DB tools), Groq only
+                          (troubleshoot runs diagnosis_node; manage runs manage_resolve —
+                          neither invokes a Gemini node)
   retrieval            -> local embedder + reranker (no MCP)
-  sql                  -> Groq + Gemini (reviewer); SQL run on a direct read-only conn
+  sql                  -> Groq + Gemini (the text_to_sql_reviewer); SQL run on a direct
+                          read-only conn  (the ONLY eval target that uses Gemini)
   routing, safety      -> Groq only
 """
 
