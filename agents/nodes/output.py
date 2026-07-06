@@ -21,6 +21,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # agents/ on path
 from llms import get_reasoner
+from utils.history import format_recent
 from prompts.output import OUTPUT_SYSTEM, OUTPUT_SYSTEM_VERSION
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -104,8 +105,11 @@ def output_node(state: dict) -> dict:
         text = state.get("guard_reason") or "I can't help with that request."
     elif state.get("clarify_abandoned"):                       # gave up after re-ask cap (templated)
         text = state.get("final_response") or "I can't proceed without that information."
-    elif intent == "general":                                  # LLM
-        text = _llm("general", f"User question: {state.get('user_input', '')}")
+    elif intent == "general":                                  # LLM (+ recent conversation)
+        convo = format_recent((state.get("messages") or [])[:-1], max_exchanges=5)
+        body = (f"Recent conversation:\n{convo}\n\n" if convo else "") + \
+               f"User question: {state.get('user_input', '')}"
+        text = _llm("general", body)
     elif intent == "analytics":                                # LLM (exact quoting)
         text = _llm("analytics", f"User question: {state.get('user_input', '')}\n"
                                  f"Result rows (JSON): {state.get('sql_result')}")
