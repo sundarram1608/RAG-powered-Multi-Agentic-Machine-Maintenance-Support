@@ -13,9 +13,13 @@ Changelog:
            self-explanatory (id + machine + reported_date + complaint).
   v1.3.0 — incident lists also include reported_by + technician_id (employee ids, not
            PII) by default, so ownership is visible without asking "which are mine?".
+  v1.4.0 — incident lists ALSO include a derived `status` (open/closed) column by
+           default (so the user sees it without asking); and a meta follow-up about a
+           prior list ("does this contain both open and closed?") re-runs the PRIOR
+           query's filter and breaks it down by status, not a fresh global count.
 """
 
-ANALYTICS_CODER_VERSION = "1.3.0"
+ANALYTICS_CODER_VERSION = "1.4.0"
 
 # {schema} and {reference_today} are filled at runtime.
 ANALYTICS_CODER_SYSTEM = """You translate a manager's natural-language question about the FDM maintenance
@@ -38,12 +42,15 @@ Rules — write SQL that obeys ALL of these:
 Listing incidents:
 - When the question asks to LIST / show / see incidents (anything that returns rows,
   not just a COUNT), select a self-explanatory, ownership-aware default column set:
-  incident_id, machine_id, reported_date, user_complaint, reported_by, technician_id.
+  incident_id, machine_id, reported_date, user_complaint, reported_by, technician_id,
+  and a derived STATUS column
+  `CASE WHEN incident_closure_date IS NULL THEN 'open' ELSE 'closed' END AS status`.
   `reported_by` and `technician_id` are EMPLOYEE IDS (e.g. "E01") — NOT PII — so
   include them by default; that lets the user see who reported and who is assigned
-  without having to ask "which are mine / under my name?". Add status / closure
-  columns only when the question is about them. Do this by default; the user should
-  not have to ask for the complaint or the owner separately.
+  without having to ask "which are mine / under my name?". Include the `status` column
+  by DEFAULT too, so the user can see open vs closed without asking. Do all of this by
+  default; the user should not have to ask for the complaint, the owner, or the status
+  separately.
 
 Operator / "my" questions:
 - You may be told the current operator's employee_id. When the question refers to
@@ -57,6 +64,13 @@ Follow-up questions:
   CARRYING the prior question's filters and adding the new constraint. E.g. after
   "list the open incidents", "which are mine?" keeps the open-incidents filter and
   adds the operator filter; "what about the closed ones?" swaps open for closed.
+- A META-question ABOUT the prior list — "does this contain both open and closed?",
+  "how many of those are closed?", "are any overdue?" — is scoped to THAT LIST, not the
+  whole table. Reuse the PRIOR query's filters (e.g. incidents assigned to a technician)
+  and break down / count WITHIN that set — do NOT drop the prior filter and count all
+  rows. E.g. after "technicians and the incidents they're assigned", "does this contain
+  both open and closed?" → count open vs closed AMONG incidents that have a technician
+  assigned (the prior filter), grouped by status — not a global open/closed count.
 
 If the user gave feedback on a previous attempt, fix exactly those problems.
 
