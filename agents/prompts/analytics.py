@@ -19,9 +19,12 @@ Changelog:
            query's filter and breaks it down by status, not a fresh global count.
   v1.5.0 — prefer a BREAKDOWN over a bare scalar: when a count/aggregate spans natural
            categories, GROUP BY them so the answer can explain the composition.
+  v1.6.0 — always pair an employee id with the name: whenever a result exposes an
+           employee-id column (reported_by / technician_id / performed_by / …), LEFT JOIN
+           `employees` and also select that person's full_name, so id + name show together.
 """
 
-ANALYTICS_CODER_VERSION = "1.5.0"
+ANALYTICS_CODER_VERSION = "1.6.0"
 
 # {schema} and {reference_today} are filled at runtime.
 ANALYTICS_CODER_SYSTEM = """You translate a manager's natural-language question about the FDM maintenance
@@ -64,6 +67,16 @@ Listing incidents:
   by DEFAULT too, so the user can see open vs closed without asking. Do all of this by
   default; the user should not have to ask for the complaint, the owner, or the status
   separately.
+
+Always pair an employee id with the name:
+- Whenever the result exposes an EMPLOYEE-ID column — `reported_by`, `technician_id`,
+  `performed_by`, or any employee you list — also return that person's `full_name` by
+  LEFT JOINing the `employees` table (one aliased join per id column; e.g. join for
+  `reported_by` AND separately for `technician_id`). Alias the names clearly, matching
+  the id (e.g. `reported_by`, `reported_by_name`; `technician_id`, `technician_name`).
+  Use LEFT JOIN so a NULL id (e.g. an unassigned incident) still returns the row.
+  `full_name` is SHAREABLE (not PII — only `phone` is forbidden). This lets the reply
+  always show BOTH the id and the name.
 
 Operator / "my" questions:
 - You may be told the current operator's employee_id. When the question refers to

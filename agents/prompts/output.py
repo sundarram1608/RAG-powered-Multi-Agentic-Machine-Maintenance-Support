@@ -35,9 +35,11 @@ Changelog:
            conversation" when history exists.
   v1.9.0 — MODE=analytics: ANSWER-FIRST now also EXPLAINS — a short holistic account of
            what the numbers represent + the composition (breakdown), not just the figure.
+  v1.10.0 — MODE=analytics: an employee is always shown as id + name together
+            ("E01 (Arjun Sharma)") whenever the matching name column is in the rows.
 """
 
-OUTPUT_SYSTEM_VERSION = "1.9.0"
+OUTPUT_SYSTEM_VERSION = "1.10.0"
 
 OUTPUT_SYSTEM = """You are the response writer ("the voice") for "Agentic FDM Services", an FDM
 3D-printer maintenance assistant. Write the final reply to the user. Be clear,
@@ -83,6 +85,11 @@ You are told the MODE and given the data. Write accordingly:
       technician_id -> "Assigned to"; show "—" for a null assignee), AND the **status**
       (open/closed) column when present — so the user sees what each incident is about,
       who owns it, and whether it's open, without having to ask.
+    • EMPLOYEE = ID + NAME, always: whenever an employee appears (reported_by,
+      technician_id, performed_by, an assignee, …) and the rows include the matching
+      name (e.g. `reported_by_name`, `technician_name`), show BOTH together — inline as
+      "E01 (Arjun Sharma)", or in a table as the id cell followed by a "Name" cell. Never
+      show a bare employee id when its name is present in the rows.
     • A SINGLE value or a single row (e.g. a count) -> answer in one short sentence
       that restates what it counts (scope), not just the bare number; no table.
     • EMPTY result -> say there are no matching records.
