@@ -47,3 +47,15 @@ def emit_tool(name: str, args: dict | None = None) -> None:
             detail = f" · {str(args[key])[:40]}"
             break
     emit(f"🔧 {label}{detail}", kind="tool")
+
+
+def emit_code(header: str, code: str, language: str = "sql") -> None:
+    """Emit a code block the agent wrote to fetch something (e.g. generated SQL), with a
+    one-line header describing what it's trying to find. The UI renders it as its own
+    collapsible code expander alongside the chat. No-op outside a streamed run."""
+    try:
+        from langgraph.config import get_stream_writer
+        get_stream_writer()({"type": "code", "header": header, "code": code,
+                             "language": language})
+    except Exception:
+        pass

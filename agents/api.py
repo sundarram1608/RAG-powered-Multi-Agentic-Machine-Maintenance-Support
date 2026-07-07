@@ -142,8 +142,12 @@ async def _astream(graph_input, thread_id, user_id, meta_value, run_name, turn_i
     try:
         async for mode, chunk in app_graph.astream(
                 graph_input, cfg, stream_mode=["updates", "messages", "custom"]):
-            if mode == "custom":                                   # node-emitted tool/step line
-                if isinstance(chunk, dict) and chunk.get("text"):
+            if mode == "custom":                                   # node-emitted tool/step/code
+                if isinstance(chunk, dict) and chunk.get("type") == "code":
+                    yield {"type": "code", "header": chunk.get("header", ""),
+                           "code": chunk.get("code", ""),
+                           "language": chunk.get("language", "sql")}
+                elif isinstance(chunk, dict) and chunk.get("text"):
                     yield {"type": chunk.get("type", "tool"), "text": chunk["text"]}
             elif mode == "messages":                               # LLM tokens (answer only)
                 msg, md = chunk

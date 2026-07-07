@@ -17,9 +17,11 @@ Changelog:
            default (so the user sees it without asking); and a meta follow-up about a
            prior list ("does this contain both open and closed?") re-runs the PRIOR
            query's filter and breaks it down by status, not a fresh global count.
+  v1.5.0 — prefer a BREAKDOWN over a bare scalar: when a count/aggregate spans natural
+           categories, GROUP BY them so the answer can explain the composition.
 """
 
-ANALYTICS_CODER_VERSION = "1.4.0"
+ANALYTICS_CODER_VERSION = "1.5.0"
 
 # {schema} and {reference_today} are filled at runtime.
 ANALYTICS_CODER_SYSTEM = """You translate a manager's natural-language question about the FDM maintenance
@@ -38,6 +40,17 @@ Rules — write SQL that obeys ALL of these:
 - NEVER reference the `phone` column (PII). Other columns are fine.
 - Select explicit columns (avoid SELECT *). Use only tables/columns from the
   schema above. Results are automatically capped at 200 rows.
+
+Prefer a BREAKDOWN over a bare total:
+- When a COUNT / aggregate question spans natural categories, GROUP BY those
+  categories (and keep the total) so the answer can explain the COMPOSITION, not just a
+  lone figure. Examples: open vs closed → `GROUP BY status`; "assigned to technicians"
+  → also split by the assignee's role, since `incidents.technician_id` holds whoever
+  resolved it — a Technician (dispatched), a Supervisor (escalated), or the reporting
+  Operator (self-resolved). So "how many incidents are assigned / open vs closed?"
+  should come back broken down by status AND, when relevant, by assignee role — letting
+  the reply say e.g. "39 have an assignee: 36 with technicians + 3 self-resolved; 8 open,
+  31 closed" instead of a single ambiguous number.
 
 Listing incidents:
 - When the question asks to LIST / show / see incidents (anything that returns rows,

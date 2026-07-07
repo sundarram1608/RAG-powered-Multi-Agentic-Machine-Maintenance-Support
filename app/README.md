@@ -71,6 +71,11 @@ and translate the three modes into events:
   tools are called directly through the MCP client — so nodes emit them explicitly.)
   Nodes can also emit a generic **`step`** line (via `streaming.emit`) for a non-tool
   progress note; the UI renders `decision` / `tool` / `step` identically as log lines.
+- **`code`** (from `custom`, via `streaming.emit_code`) — a code block the agent *wrote*
+  to fetch something (currently the Analytics coder's generated **SQL**). It renders as
+  its **own collapsible `🧮 <header>` expander** (header = the query's rationale, i.e.
+  what it's trying to find; body = the SQL via `st.code`), separate from the activity
+  log, and is persisted with the message so it stays in scrollback.
 - **`token`** (from `messages`, Output node only) — the final answer **types out live**;
   a trailing full-message repeat is de-duped in `api.py`.
 

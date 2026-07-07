@@ -237,7 +237,7 @@ The plumbing every node stands on (no nodes yet):
 - **Output format** (Pydantic `SqlPlan` via `with_structured_output`) → state `sql_plan`, `analytics_attempts`; execute → `sql_result`; tags `prompt_versions["analytics"]`.
 - **Schema grounding:** the prompt is filled with `get_schema_context()` (from `schema_metadata.json`) + `REFERENCE_TODAY` (`2026-06-16`) so date logic matches the dataset.
 - **Edge cases:** reviewer-reject or DB-error → regenerate with the critique (capped at `ANALYTICS_MAX_ATTEMPTS = 3`); never selects `phone`; empty result → handled by Output ("no matching records"); results auto-capped at 200 rows (enforced by the `run_readonly_query` tool, `mcp_server/safety.py` `DEFAULT_MAX_ROWS`).
-- **Prompt:** `prompts/analytics.py` (`ANALYTICS_CODER_SYSTEM`) · v1.4.0 (operator-aware "my/mine"; follow-ups — incl. a **meta follow-up** about a prior list re-scoping to that list's filter, not a global count; incident lists include complaint + reported_by/technician_id **+ a derived `status` (open/closed)** by default).
+- **Prompt:** `prompts/analytics.py` (`ANALYTICS_CODER_SYSTEM`) · v1.5.0 (operator-aware "my/mine"; follow-ups — incl. a **meta follow-up** about a prior list re-scoping to that list's filter, not a global count; incident lists include complaint + reported_by/technician_id **+ a derived `status` (open/closed)** by default; **prefers a breakdown over a bare total** — GROUP BY status / assignee role so the answer can explain the composition). The generated SQL is surfaced to the UI as a code expander (see app README).
 
 
 
@@ -384,7 +384,7 @@ The plumbing every node stands on (no nodes yet):
 - **PII scrub:** regex strips any email / 7+-digit phone from the final text (belt-and-suspenders; tools already keep PII out of state).
 - **Verifier exhaustion:** routed to Technician Action (auto-dispatch); Output states a technician will assess it (no apologetic caveat).
 - **Edge cases:** empty analytics result → "no matching records"; `error` action → generic apology. Systematic faithfulness eval is handled in Phase 5 (`eval/` troubleshoot faithfulness/answer-relevance judges).
-- **Prompt:** `prompts/output.py` · v1.8.0 (general + analytics + **advice** modes; **general** now receives the recent conversation to answer meta questions ("why did you say X?"); analytics is **answer-first** — direct yes/no + data scope before the number — and multi-row → table with complaint + reporter/assignee + **Status** columns; advice = grounded safety-first guidance across **all models** — one shared answer + per-model deltas).
+- **Prompt:** `prompts/output.py` · v1.9.0 (general + analytics + **advice** modes; **general** now receives the recent conversation to answer meta questions ("why did you say X?"); analytics is **answer-first AND explains** — direct yes/no + scope + the **composition/breakdown**, not just a figure — and multi-row → table with complaint + reporter/assignee + **Status** columns; advice = grounded safety-first guidance across **all models** — one shared answer + per-model deltas).
 
 
 

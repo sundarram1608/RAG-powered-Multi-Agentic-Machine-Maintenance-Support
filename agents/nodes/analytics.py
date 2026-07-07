@@ -58,6 +58,10 @@ def analytics_generate(state: dict) -> dict:
     plan = get_reasoner(structured=SqlPlan).invoke(
         [SystemMessage(content=system), HumanMessage(content=human)])
 
+    # Surface the generated SQL to the UI as its own code expander, headed by what it's
+    # trying to find (the plan's rationale). No-op outside a streamed run.
+    streaming.emit_code(plan.rationale or "Query", plan.sql, language="sql")
+
     versions = dict(state.get("prompt_versions", {}))
     versions["analytics"] = ANALYTICS_CODER_VERSION
     return {

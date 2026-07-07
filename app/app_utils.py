@@ -31,13 +31,16 @@ _BUTTONS = {
 
 def _run_streamed(stream) -> dict:
     """Drive a backend stream into a live activity log + a typing answer; return the
-    final result event. Event types: decision/tool/step (log lines), token (answer
-    tokens), result (the final answer/interrupt/error dict)."""
+    final result event. Event types: decision/tool/step (log lines), code (a code block
+    the agent wrote, e.g. generated SQL), token (answer tokens), result (the final
+    answer/interrupt/error dict)."""
     result = None
     steps = []          # activity-log lines (decisions + tool calls)
+    codes = []          # code blocks the agent wrote: {header, code, language}
     tokens = []         # streamed answer tokens
     status = st.status("Working…", expanded=True)   # the live log (on top; collapses at end)
-    answer_box = st.empty()                          # the answer, BELOW the log (stays visible)
+    code_box = st.container()                        # code expanders, below the log
+    answer_box = st.empty()                          # the answer, BELOW that (stays visible)
     for ev in stream:
         t = ev.get("type")
         if t in ("decision", "tool", "step"):
@@ -46,6 +49,13 @@ def _run_streamed(stream) -> dict:
                 steps.append(line)
                 status.update(label=line)               # spinner shows the latest step
                 status.markdown("\n".join(f"- {s}" for s in steps))
+        elif t == "code":
+            block = {"header": ev.get("header", "") or "Query",
+                     "code": ev.get("code", ""), "language": ev.get("language", "sql")}
+            if block["code"]:
+                codes.append(block)
+                with code_box.expander(f"🧮 {block['header']}", expanded=False):
+                    st.code(block["code"], language=block["language"])
         elif t == "token":
             tokens.append(ev.get("text", ""))
             answer_box.markdown("".join(tokens))         # answer types out live
@@ -55,6 +65,7 @@ def _run_streamed(stream) -> dict:
     result = result or {"kind": "error",
                         "content": "⚠️ Sorry — something went wrong. Please try again."}
     result["steps"] = steps          # persist the activity feed with the message
+    result["code_blocks"] = codes    # persist the code the agent wrote
     return result
 
 
@@ -91,15 +102,20 @@ def render_chat_history() -> None:
             if steps:   # the live activity feed, persisted as a collapsed expander above the reply
                 with st.expander(f"🔎 Activity · {len(steps)} steps", expanded=False):
                     st.markdown("\n".join(f"- {s}" for s in steps))
+            for block in m.get("code_blocks") or []:   # code the agent wrote (e.g. SQL)
+                with st.expander(f"🧮 {block.get('header') or 'Query'}", expanded=False):
+                    st.code(block.get("code", ""), language=block.get("language", "sql"))
             st.markdown(m["content"])
             if m.get("run_id"):
                 _feedback_widget(m["run_id"])
 
 
-def _append(role, content, steps=None, run_id=None) -> None:
+def _append(role, content, steps=None, run_id=None, code_blocks=None) -> None:
     msg = {"role": role, "content": content}
     if steps:
         msg["steps"] = steps
+    if code_blocks:         # code the agent wrote (e.g. generated SQL) -> its own expander
+        msg["code_blocks"] = code_blocks
     if run_id:              # only answered turns carry a run_id -> feedback thumbs (6c)
         msg["run_id"] = run_id
     st.session_state.messages.append(msg)
@@ -130,19 +146,22 @@ def _apply(res) -> None:
     `res["steps"]` (the streamed activity feed) is persisted with the message so it stays
     visible as an expander in the history."""
     steps = res.get("steps")
+    codes = res.get("code_blocks")
     if res["kind"] == "error":
         # provider/other failure (e.g. rate limit) — show the friendly message and
         # leave `pending` unchanged so the user can retry the same step.
-        _append(ROLE_ASSISTANT, res.get("content") or "⚠️ Something went wrong. Please try again.", steps)
+        _append(ROLE_ASSISTANT, res.get("content") or "⚠️ Something went wrong. Please try again.",
+                steps, code_blocks=codes)
         return
     if res["kind"] == "answer":
         _append(ROLE_ASSISTANT, res.get("content") or "_(no response)_", steps,
-                run_id=res.get("run_id"))   # answered turn -> feedback thumbs
+                run_id=res.get("run_id"), code_blocks=codes)   # answered turn -> feedback thumbs
         st.session_state.pending = None
     else:
         st.session_state.pending = {"kind": res["kind"], "payload": res.get("payload", {}),
                                     "turn_id": res.get("turn_id"), "run_id": res.get("run_id")}
-        _append(ROLE_ASSISTANT, _prompt_text(res["kind"], res.get("payload", {})), steps)
+        _append(ROLE_ASSISTANT, _prompt_text(res["kind"], res.get("payload", {})), steps,
+                code_blocks=codes)
 
 
 def handle_user_message(text) -> None:
