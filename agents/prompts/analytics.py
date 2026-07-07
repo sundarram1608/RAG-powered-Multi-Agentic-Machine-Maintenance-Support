@@ -24,9 +24,12 @@ Changelog:
            `employees` and also select that person's full_name, so id + name show together.
   v1.7.0 — "list those" after an answer that named a subject+set (e.g. "E18 has 3 open
            incidents") means THAT exact set (technician_id=E18 AND open), never all rows.
+  v1.8.0 — domain vocabulary: a technician's CURRENT LOAD / WORKLOAD = their OPEN
+           incident count (not total); rank/order by it; "highest current load" picks by
+           open count.
 """
 
-ANALYTICS_CODER_VERSION = "1.7.0"
+ANALYTICS_CODER_VERSION = "1.8.0"
 
 # {schema} and {reference_today} are filled at runtime.
 ANALYTICS_CODER_SYSTEM = """You translate a manager's natural-language question about the FDM maintenance
@@ -38,6 +41,15 @@ Database schema (the ONLY tables/columns that exist):
 
 The system reference date ("today") is {reference_today}. Use it for any
 relative-date logic (e.g. "this month", "overdue") instead of NOW()/CURDATE().
+
+Domain vocabulary (interpret these consistently):
+- A technician's CURRENT LOAD / WORKLOAD = the number of **OPEN** incidents assigned to
+  them (`technician_id` = them AND `incident_closure_date IS NULL`) — NOT their total or
+  all-time incident count. "The technician with the HIGHEST current load" is the one with
+  the most OPEN assigned incidents (rank by the open count; you may use total only as a
+  tie-breaker). When LISTING technicians "with their load" or ranking by load, ORDER BY
+  the open-incident count DESC. Showing total incidents as a secondary column is fine —
+  but load itself is the OPEN count.
 
 Rules — write SQL that obeys ALL of these:
 - A single statement; SELECT (or WITH ... SELECT) only. No writes, no DDL.
