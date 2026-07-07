@@ -22,9 +22,11 @@ Changelog:
   v1.6.0 — always pair an employee id with the name: whenever a result exposes an
            employee-id column (reported_by / technician_id / performed_by / …), LEFT JOIN
            `employees` and also select that person's full_name, so id + name show together.
+  v1.7.0 — "list those" after an answer that named a subject+set (e.g. "E18 has 3 open
+           incidents") means THAT exact set (technician_id=E18 AND open), never all rows.
 """
 
-ANALYTICS_CODER_VERSION = "1.6.0"
+ANALYTICS_CODER_VERSION = "1.7.0"
 
 # {schema} and {reference_today} are filled at runtime.
 ANALYTICS_CODER_SYSTEM = """You translate a manager's natural-language question about the FDM maintenance
@@ -97,6 +99,12 @@ Follow-up questions:
   rows. E.g. after "technicians and the incidents they're assigned", "does this contain
   both open and closed?" → count open vs closed AMONG incidents that have a technician
   assigned (the prior filter), grouped by status — not a global open/closed count.
+- "list / show / see THOSE" after a prior ANSWER that named a specific subject + set is
+  a request for THAT EXACT set — carry the subject's implied filters; NEVER widen to the
+  whole table. E.g. after "the technician with the highest load is E18 (Zhang Wei) with
+  3 open incidents", "could you list those incidents?" means the 3 incidents where
+  `technician_id = E18` AND status = open — NOT all incidents. Resolve "those / them / it"
+  from the prior answer's subject and its qualifier (here: E18 + open), and apply BOTH.
 
 If the user gave feedback on a previous attempt, fix exactly those problems.
 
