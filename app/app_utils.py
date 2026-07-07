@@ -39,7 +39,7 @@ def _run_streamed(stream) -> dict:
     codes = []          # code blocks the agent wrote: {header, code, language}
     tokens = []         # streamed answer tokens
     status = st.status("Working…", expanded=True)   # the live log (on top; collapses at end)
-    code_box = st.container()                        # code expanders, below the log
+    code_slot = st.empty()                           # the code expander (only the LATEST), below the log
     answer_box = st.empty()                          # the answer, BELOW that (stays visible)
     for ev in stream:
         t = ev.get("type")
@@ -54,8 +54,11 @@ def _run_streamed(stream) -> dict:
                      "code": ev.get("code", ""), "language": ev.get("language", "sql")}
             if block["code"]:
                 codes.append(block)
-                with code_box.expander(f"🧮 {block['header']}", expanded=False):
-                    st.code(block["code"], language=block["language"])
+                # Only the LATEST query is shown/kept — if execute retries on a DB error
+                # and re-runs, this replaces the earlier block (final query = the answer).
+                with code_slot.container():
+                    with st.expander(f"🧮 {block['header']}", expanded=False):
+                        st.code(block["code"], language=block["language"])
         elif t == "token":
             tokens.append(ev.get("text", ""))
             answer_box.markdown("".join(tokens))         # answer types out live
@@ -65,7 +68,7 @@ def _run_streamed(stream) -> dict:
     result = result or {"kind": "error",
                         "content": "⚠️ Sorry — something went wrong. Please try again."}
     result["steps"] = steps          # persist the activity feed with the message
-    result["code_blocks"] = codes    # persist the code the agent wrote
+    result["code_blocks"] = codes[-1:]   # persist ONLY the final query (the one behind the answer)
     return result
 
 
