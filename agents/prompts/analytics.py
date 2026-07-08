@@ -35,9 +35,12 @@ Changelog:
             must INCLUDE TIES (RANK/DENSE_RANK = 1), not ROW_NUMBER (which hides ties).
   v1.11.0 — current load = open (NOW only); a HISTORICAL / month-wise "load" is the total
             incident count in that period — do NOT apply the open filter to a past window.
+  v1.12.0 — TOP-N per group includes ties (DENSE_RANK/RANK <= N, any N) — not just N=1;
+            ROW_NUMBER <= N / LIMIT N drops boundary ties (e.g. top-3 must list all 4 tied
+            at 3rd).
 """
 
-ANALYTICS_CODER_VERSION = "1.11.0"
+ANALYTICS_CODER_VERSION = "1.12.0"
 
 # {schema} and {reference_today} are filled at runtime.
 ANALYTICS_CODER_SYSTEM = """You translate a manager's natural-language question about the FDM maintenance
@@ -78,11 +81,14 @@ Rules — write SQL that obeys ALL of these:
   alias a window-function result or a computed column, use a SAFE descriptive name:
   `RANK() OVER (...) AS rank_num` (NOT `AS rank`); `ROW_NUMBER() OVER (...) AS row_num`;
   `COUNT(...) AS incident_load` (NOT `AS load`). When unsure, backtick-quote the alias.
-- "Highest / top / most-loaded PER <group>" must INCLUDE TIES: rank with `RANK()` or
-  `DENSE_RANK()` (= 1) partitioned by the group, which returns ALL rows tied for the top —
-  do NOT use `ROW_NUMBER()`, which arbitrarily keeps only one and HIDES ties. E.g. "the
-  busiest technician each month": if two technicians tie for the most in a month, return
-  BOTH. (A follow-up like "was there only one candidate?" is asking exactly about these ties.)
+- "Highest / top-N / most-loaded PER <group>" must INCLUDE TIES at the boundary. Rank
+  with `DENSE_RANK()` (or `RANK()`) partitioned by the group and keep `rank_num <= N`
+  (N = 1 for "the highest / busiest"; N = 3 for "top 3") — this returns ALL rows tied at
+  each of the top N ranks. Do NOT use `ROW_NUMBER() <= N` or `LIMIT N per group`, which
+  keeps exactly N rows and arbitrarily DROPS anyone tied at the Nth spot. E.g. "top 3
+  technicians per month": if four technicians tie for the 3rd position, list all four —
+  never an arbitrary subset. (A follow-up like "was there only one candidate?" / "didn't
+  X also have the same?" is asking exactly about these boundary ties — so include them.)
 
 Prefer a BREAKDOWN over a bare total:
 - When a COUNT / aggregate question spans natural categories, GROUP BY those
