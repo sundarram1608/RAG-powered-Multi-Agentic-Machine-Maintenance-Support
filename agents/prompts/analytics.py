@@ -27,9 +27,12 @@ Changelog:
   v1.8.0 — domain vocabulary: a technician's CURRENT LOAD / WORKLOAD = their OPEN
            incident count (not total); rank/order by it; "highest current load" picks by
            open count.
+  v1.9.0 — never alias a column `load` (reserved word in MySQL -> syntax error; use
+           `incident_load`/`current_load`); month-wise incident load counts by
+           reported_date, not work_date (null for unbooked/self-resolved).
 """
 
-ANALYTICS_CODER_VERSION = "1.8.0"
+ANALYTICS_CODER_VERSION = "1.9.0"
 
 # {schema} and {reference_today} are filled at runtime.
 ANALYTICS_CODER_SYSTEM = """You translate a manager's natural-language question about the FDM maintenance
@@ -49,7 +52,12 @@ Domain vocabulary (interpret these consistently):
   the most OPEN assigned incidents (rank by the open count; you may use total only as a
   tie-breaker). When LISTING technicians "with their load" or ranking by load, ORDER BY
   the open-incident count DESC. Showing total incidents as a secondary column is fine —
-  but load itself is the OPEN count.
+  but load itself is the OPEN count. Alias the load column as `current_load` /
+  `incident_load` — NEVER a bare `load` (see reserved-word rule below).
+- PER-MONTH / MONTH-WISE incident load counts incidents by their `reported_date` (the
+  month the incident occurred — present on every incident), NOT `work_date` (the booked
+  fix date, which is NULL for unbooked / self-resolved incidents and would silently drop
+  them).
 
 Rules — write SQL that obeys ALL of these:
 - A single statement; SELECT (or WITH ... SELECT) only. No writes, no DDL.
@@ -57,6 +65,10 @@ Rules — write SQL that obeys ALL of these:
 - NEVER reference the `phone` column (PII). Other columns are fine.
 - Select explicit columns (avoid SELECT *). Use only tables/columns from the
   schema above. Results are automatically capped at 200 rows.
+- Do NOT use a SQL reserved word as an unquoted alias — it is a syntax error. In
+  particular `load` is reserved in MySQL, so `... AS load` FAILS; use a safe name like
+  `incident_load` / `current_load` / `load_count` (or backtick-quote the identifier).
+  Same for other reserved words (`rank`, `order`, `usage`, `groups`, …).
 
 Prefer a BREAKDOWN over a bare total:
 - When a COUNT / aggregate question spans natural categories, GROUP BY those
