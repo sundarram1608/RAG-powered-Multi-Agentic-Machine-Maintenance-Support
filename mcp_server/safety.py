@@ -24,12 +24,16 @@ ENV_PATH = PROJECT_ROOT / ".env"
 
 # Write / DDL / dangerous keywords — any whole-word match (case-insensitive)
 # rejects the query. INTO blocks `SELECT ... INTO OUTFILE/@var`; OUTFILE/DUMPFILE/
-# LOAD_FILE block file I/O (also denied by the read-only user).
+# LOAD_FILE block file I/O. NOTE: these are *defense-in-depth* — the read-only MySQL
+# user (SELECT-only, no FILE privilege) is the real, unbypassable backstop; this list
+# just fails such SQL early with a clear reason. `LOAD` is matched ONLY in its
+# file-I/O forms (`LOAD DATA/XML/INDEX`, `LOAD_FILE`), never as a bare word, so a
+# harmless column alias like `AS load` / `current_load` is NOT blocked.
 _FORBIDDEN_KEYWORDS = [
     "INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE", "TRUNCATE",
     "REPLACE", "RENAME", "GRANT", "REVOKE", "MERGE", "CALL", "EXEC", "EXECUTE",
-    "SET", "LOCK", "UNLOCK", "HANDLER", "LOAD", "LOAD_FILE", "OUTFILE",
-    "DUMPFILE", "INTO",
+    "SET", "LOCK", "UNLOCK", "HANDLER",
+    r"LOAD\s+(?:DATA|XML|INDEX)", "LOAD_FILE", "OUTFILE", "DUMPFILE", "INTO",
 ]
 _FORBIDDEN_RE = re.compile(r"\b(" + "|".join(_FORBIDDEN_KEYWORDS) + r")\b", re.IGNORECASE)
 
