@@ -384,7 +384,7 @@ The plumbing every node stands on (no nodes yet):
 - **PII scrub:** regex strips any email / 7+-digit phone from the final text (belt-and-suspenders; tools already keep PII out of state).
 - **Verifier exhaustion:** routed to Technician Action (auto-dispatch); Output states a technician will assess it (no apologetic caveat).
 - **Edge cases:** empty analytics result → "no matching records"; `error` action → generic apology. Systematic faithfulness eval is handled in Phase 5 (`eval/` troubleshoot faithfulness/answer-relevance judges).
-- **Prompt:** `prompts/output.py` · v1.10.0 (general + analytics + **advice** modes; **general** now receives the recent conversation to answer meta questions ("why did you say X?"); analytics is **answer-first AND explains** — direct yes/no + scope + the **composition/breakdown**, not just a figure — and multi-row → table with complaint + reporter/assignee + **Status** columns; advice = grounded safety-first guidance across **all models** — one shared answer + per-model deltas).
+- **Prompt:** `prompts/output.py` · v1.11.0 (general + analytics + **advice** modes; **general** now receives the recent conversation to answer meta questions ("why did you say X?"); analytics is **answer-first AND explains** — direct yes/no + scope + the **composition/breakdown**, not just a figure — and multi-row → table with complaint + reporter/assignee + **Status** columns; advice = grounded safety-first guidance across **all models** — one shared answer + per-model deltas).
 
 
 
